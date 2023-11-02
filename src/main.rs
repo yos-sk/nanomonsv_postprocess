@@ -3,7 +3,6 @@ use std::process;
 
 mod realignment;
 
-
 #[derive(Parser)]
 #[command(author = "Yoshitaka Sakamoto", version = "0.1.0", about = "Post process of nanomonsv", long_about = None)]
 struct Arguments {
@@ -14,7 +13,7 @@ struct Arguments {
     support_read_file: String,
 
     #[arg(short = 'b', long)]
-    nanomonsv_bp_file: String,
+    bam_file: String,
 }
 
 fn main() {
@@ -22,7 +21,7 @@ fn main() {
     if let Err(error) = realignment::run(
         &arguments.input_bed,
         &arguments.support_read_file,
-        &arguments.nanomonsv_bp_file,
+        &arguments.bam_file,
     ) {
         eprintln!("{}", error);
         process::exit(1);
