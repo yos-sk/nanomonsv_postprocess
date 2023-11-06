@@ -71,7 +71,7 @@ impl IdenticalInfo {
 }
 
 
-pub fn run(input_bed: &str, support_read_file: &str, bam_file: &str) -> Result<(), Box<dyn Error>> {
+pub fn run(input_bed: &str, support_read_file: &str, bam_file: &str, min_identity: f64) -> Result<(), Box<dyn Error>> {
     // open bed file including SV breakpoint information with ±100 bp sequence
     let bp_reader = open_file(input_bed).expect(&format!("Could not open file {}", input_bed));
     let mut bp_info_db: HashSet<SVInfo> = HashSet::new();
@@ -106,7 +106,7 @@ pub fn run(input_bed: &str, support_read_file: &str, bam_file: &str) -> Result<(
     }
 
     // grouping identical SVs by smith-waterman algorithm
-    let threshold = 99.0;
+    //let threshold = 99.0;
     let mut identical_pairs: Vec<(String, String, usize)> = Vec::new();
     // realignment of 2 * 2 breakpoint combination
     for sv_info_1 in &bp_info_db {
@@ -148,7 +148,7 @@ pub fn run(input_bed: &str, support_read_file: &str, bam_file: &str) -> Result<(
                 }
             }
 
-            if bp1_max_id >= threshold && bp2_max_id >= threshold {
+            if bp1_max_id >= min_identity && bp2_max_id >= min_identity {
                 eprintln!("{}\t{}\t{}", sv_info_1.sv_id, sv_info_2.sv_id, pattern);
                 // update breakpoint information
                 identical_pairs.push((sv_info_1.sv_id.clone(), sv_info_2.sv_id.clone(), pattern))
