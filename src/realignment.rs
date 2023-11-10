@@ -294,8 +294,10 @@ fn classify_haplotype_fetch_bam(group_db: &HashMap<Vec<String>, IdenticalInfo>, 
                         continue;
                     }
                     if value == rust_htslib::bam::record::Aux::String("HP1") {
+                    // if value == rust_htslib::bam::record::Aux::U8(1) {
                         hap = 1;
                     } else if value == rust_htslib::bam::record::Aux::String("HP2") {
+                    // else if value == rust_htslib::bam::record::Aux::U8(2) {
                         hap = 2;
                     } else {
                         hap = 0;
@@ -398,7 +400,7 @@ fn classify_haplotype_fetch_bam(group_db: &HashMap<Vec<String>, IdenticalInfo>, 
     let mut unassigned = 0;
     for (key, value) in group_db.iter() {
         let mut sv_bp1_cnt = vec![0, 0, 0];
-        let mut max_sv1_id = vec![String::new(); 3];
+        let mut max_sv1_id = vec![(String::new(), 0); 3];
         let mut max_sv1_cnt = vec![0, 0, 0];
         // iterate by value, then count haplotype
         // breakpoint 1
@@ -412,22 +414,22 @@ fn classify_haplotype_fetch_bam(group_db: &HashMap<Vec<String>, IdenticalInfo>, 
                     sv_bp1_cnt[2] += cnt_vec[2];
                     if cnt_vec[0] > max_sv1_cnt[0] {
                         max_sv1_cnt[0] = cnt_vec[0];
-                        max_sv1_id[0] = sv_id.clone();
+                        max_sv1_id[0] = (sv_id.clone(), bp_num);
                     }
                     if cnt_vec[1] > max_sv1_cnt[1] {
                         max_sv1_cnt[1] = cnt_vec[1];
-                        max_sv1_id[1] = sv_id.clone();
+                        max_sv1_id[1] = (sv_id.clone(), bp_num);
                     }
                     if cnt_vec[2] > max_sv1_cnt[2] {
                         max_sv1_cnt[2] = cnt_vec[2];
-                        max_sv1_id[2] = sv_id.clone();
+                        max_sv1_id[2] = (sv_id.clone(), bp_num);
                     }
                 }
             }
         }
 
         let mut sv_bp2_cnt = vec![0, 0, 0];
-        let mut max_sv2_id = vec![String::new(); 3];
+        let mut max_sv2_id = vec![(String::new(), 0); 3];
         let mut max_sv2_cnt = vec![0, 0, 0];
         // breakpoint 2
         for item in value.identical_bp2.iter() {
@@ -440,15 +442,15 @@ fn classify_haplotype_fetch_bam(group_db: &HashMap<Vec<String>, IdenticalInfo>, 
                     sv_bp2_cnt[2] += cnt_vec[2];
                     if cnt_vec[0] > max_sv2_cnt[0] {
                         max_sv2_cnt[0] = cnt_vec[0];
-                        max_sv2_id[0] = sv_id.clone();
+                        max_sv2_id[0] = (sv_id.clone(), bp_num);
                     }
                     if cnt_vec[1] > max_sv2_cnt[1] {
                         max_sv2_cnt[1] = cnt_vec[1];
-                        max_sv2_id[1] = sv_id.clone();
+                        max_sv2_id[1] = (sv_id.clone(), bp_num);
                     }
                     if cnt_vec[2] > max_sv2_cnt[2] {
                         max_sv2_cnt[2] = cnt_vec[2];
-                        max_sv2_id[2] = sv_id.clone();
+                        max_sv2_id[2] = (sv_id.clone(), bp_num);
                     }
                 }
             }
@@ -466,9 +468,9 @@ fn classify_haplotype_fetch_bam(group_db: &HashMap<Vec<String>, IdenticalInfo>, 
         } else {
             assigned += 1;
             if sv_bp1_cnt[1] > 0 {
-                print!("\thaplotype_1\t{}", max_sv1_id[1]);
+                print!("\thaplotype_1\t{},{}", max_sv1_id[1].0, max_sv1_id[1].1);
             } else {
-                print!("\thaplotype_2\t{}", max_sv1_id[2]);
+                print!("\thaplotype_2\t{},{}", max_sv1_id[2].0, max_sv1_id[2].1);
             }
         }
 
@@ -481,9 +483,9 @@ fn classify_haplotype_fetch_bam(group_db: &HashMap<Vec<String>, IdenticalInfo>, 
         } else {
             assigned += 1;
             if sv_bp2_cnt[1] > 0 {
-                println!("\thaplotype_1\t{}", max_sv2_id[1]);
+                println!("\thaplotype_1\t{},{}", max_sv2_id[1].0, max_sv2_id[1].1);
             } else {
-                println!("\thaplotype_2\t{}", max_sv2_id[2]);
+                println!("\thaplotype_2\t{},{}", max_sv2_id[2].0, max_sv2_id[2].1);
             }
         }
     }
