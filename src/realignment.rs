@@ -71,7 +71,7 @@ impl IdenticalInfo {
 }
 
 
-pub fn run(input_bed: &str, support_read_file: &str, bam_file: &str, min_identity: f64) -> Result<(), Box<dyn Error>> {
+pub fn run(input_bed: &str, support_read_file: &str, bam_file: &str, min_identity: f64, min_length: usize) -> Result<(), Box<dyn Error>> {
     // open bed file including SV breakpoint information with ±100 bp sequence
     let bp_reader = open_file(input_bed).expect(&format!("Could not open file {}", input_bed));
     let mut bp_info_db: HashSet<SVInfo> = HashSet::new();
@@ -121,37 +121,37 @@ pub fn run(input_bed: &str, support_read_file: &str, bam_file: &str, min_identit
                 continue;
             }
             // smith_waterman algorithm
-            let result1 = match smith_waterman::run(&sv_info_1.bp1_seq, &sv_info_2.bp1_seq) {
-                Ok(id) => id,
-                _ => -1.0,
+            let result1 = match smith_waterman::run(&sv_info_1.bp1_seq, &sv_info_2.bp1_seq, min_identity, min_length) {
+                Ok(flag) => flag,
+                _ => false,
             };
-            let result2 = match smith_waterman::run(&sv_info_1.bp1_seq, &sv_info_2.bp2_seq) {
-                Ok(id) => id,
-                _ => -1.0,
+            let result2 = match smith_waterman::run(&sv_info_1.bp1_seq, &sv_info_2.bp2_seq, min_identity, min_length) {
+                Ok(flag) => flag,
+                _ => false,
             };
-            let mut bp1_max_id = 0.0;
-            let mut bp2_max_id = 0.0;
-            let mut pattern = 0;
-            if result1 > result2 {
-                bp1_max_id = result1;
-                pattern = 0;
-                match smith_waterman::run(&sv_info_1.bp2_seq, &sv_info_2.bp2_seq) {
-                    Ok(id) => bp2_max_id = id,
-                    _ => bp2_max_id = -1.0,
+            
+            if result1 && !result2 {
+                let pattern = 0;
+                let result = match smith_waterman::run(&sv_info_1.bp2_seq, &sv_info_2.bp2_seq, min_identity, min_length) {
+                    Ok(flag) => flag,
+                    _ => false,
+                };
+                if result {
+                    eprintln!("{}\t{}\t{}", sv_info_1.sv_id, sv_info_2.sv_id, pattern);
+                    // update breakpoint information
+                    identical_pairs.push((sv_info_1.sv_id.clone(), sv_info_2.sv_id.clone(), pattern));
                 }
             } else {
-                bp1_max_id = result2;
-                pattern = 1;
-                match smith_waterman::run(&sv_info_1.bp2_seq, &sv_info_2.bp1_seq) {           
-                    Ok(id) => bp2_max_id = id,
-                    _ => bp2_max_id = -1.0,
+                let pattern = 1;
+                let result = match smith_waterman::run(&sv_info_1.bp2_seq, &sv_info_2.bp1_seq, min_identity, min_length) {           
+                    Ok(flag) => flag,
+                    _ => false,
+                };
+                if result {
+                    eprintln!("{}\t{}\t{}", sv_info_1.sv_id, sv_info_2.sv_id, pattern);
+                    // update breakpoint information
+                    identical_pairs.push((sv_info_1.sv_id.clone(), sv_info_2.sv_id.clone(), pattern));
                 }
-            }
-
-            if bp1_max_id >= min_identity && bp2_max_id >= min_identity {
-                eprintln!("{}\t{}\t{}", sv_info_1.sv_id, sv_info_2.sv_id, pattern);
-                // update breakpoint information
-                identical_pairs.push((sv_info_1.sv_id.clone(), sv_info_2.sv_id.clone(), pattern))
             }
         }
     }

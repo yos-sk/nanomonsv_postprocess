@@ -5,7 +5,7 @@ mod realignment;
 mod filt;
 
 #[derive(Parser)]
-#[command(author = "Yoshitaka Sakamoto", version = "0.1.0", about = "Post process of nanomonsv", long_about = None)]
+#[command(author = "Yoshitaka Sakamoto", version = "0.2.0", about = "Post process of nanomonsv", long_about = None)]
 
 struct Arguments {
     #[command(subcommand)]
@@ -26,6 +26,9 @@ enum Commands {
 
         #[arg(short = 'd', long, default_value = "99.0")]
         min_identity: String,
+
+        #[arg(short = 'l', long, default_value = "180")]
+        min_length: String,
     },
 
     Filt {
@@ -51,13 +54,16 @@ fn main() {
             support_read_file,
             bam_file,
             min_identity,
+            min_length,
         } => {
             let min_identity: f64 = min_identity.parse().unwrap_or(99.0);
+            let min_length: usize = min_length.parse().unwrap_or(180);
             if let Err(error) = realignment::run(
                 input_bed,
                 support_read_file,
                 bam_file,
                 min_identity,
+                min_length,
             ) {
                 eprintln!("{}", error);
                 process::exit(1);
