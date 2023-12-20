@@ -1,8 +1,8 @@
+use flate2::read::MultiGzDecoder;
+use std::error::Error;
+use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
-use std::error::Error;
-use flate2::read::MultiGzDecoder;
-use std::fs::File;
 
 pub fn open_file<P: AsRef<Path>>(p: P) -> Result<Box<dyn BufRead>, Box<dyn Error>> {
     let r = File::open(p.as_ref())?;

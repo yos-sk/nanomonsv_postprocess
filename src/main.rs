@@ -1,11 +1,11 @@
 use clap::{Parser, Subcommand};
 use std::process;
 
-mod realignment;
 mod filt;
+mod realignment;
 
 #[derive(Parser)]
-#[command(author = "Yoshitaka Sakamoto", version = "0.2.0", about = "Post process of nanomonsv", long_about = None)]
+#[command(author = "Yoshitaka Sakamoto", version = "0.2.1", about = "Post process of nanomonsv", long_about = None)]
 
 struct Arguments {
     #[command(subcommand)]
@@ -67,8 +67,8 @@ fn main() {
             ) {
                 eprintln!("{}", error);
                 process::exit(1);
-            }  
-        },
+            }
+        }
 
         Commands::Filt {
             identical_file,
@@ -84,7 +84,7 @@ fn main() {
             ) {
                 eprintln!("{}", error);
                 process::exit(1);
-            }  
-        },
+            }
+        }
     }
 }

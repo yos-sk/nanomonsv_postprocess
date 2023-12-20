@@ -3,9 +3,14 @@ use bio::alignment::AlignmentOperation::*;
 
 use std::error::Error;
 
-pub fn run(seq1: &Vec<u8>, seq2: &Vec<u8>, identity_th: f64, length_th: usize) -> Result<bool, Box<dyn Error>> {
+pub fn run(
+    seq1: &Vec<u8>,
+    seq2: &Vec<u8>,
+    identity_th: f64,
+    length_th: usize,
+) -> Result<bool, Box<dyn Error>> {
     let score = |a: u8, b: u8| if a == b { 1i32 } else { -2i32 };
-    // Gap open score: -2, gap extension score: -1 
+    // Gap open score: -2, gap extension score: -1
     let mut aligner1 = Aligner::with_capacity(seq1.len(), seq2.len(), -10, -1, &score);
     let alignment1 = aligner1.local(seq1, seq2);
 
@@ -49,7 +54,8 @@ pub fn run(seq1: &Vec<u8>, seq2: &Vec<u8>, identity_th: f64, length_th: usize) -
         identity2
     };
     */
-    Ok((identity1 >= identity_th && length1 >= length_th) || (identity2 >= identity_th && length2 >= length_th))
+    Ok((identity1 >= identity_th && length1 >= length_th)
+        || (identity2 >= identity_th && length2 >= length_th))
 }
 
 pub fn reverse_complement(sequence: &Vec<u8>) -> Vec<u8> {
