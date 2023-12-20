@@ -1,8 +1,8 @@
-use std::error::Error;
-use std::io::BufRead;
+use rust_htslib::bam::{Header, IndexedReader, Read};
 use std::collections::HashMap;
 use std::collections::HashSet;
-use rust_htslib::bam::{IndexedReader, Read, Header};
+use std::error::Error;
+use std::io::BufRead;
 
 use nanomonsv_postprocess::open_file;
 #[path = "./smith_waterman.rs"]
@@ -70,8 +70,13 @@ impl IdenticalInfo {
     }
 }
 
-
-pub fn run(input_bed: &str, support_read_file: &str, bam_file: &str, min_identity: f64, min_length: usize) -> Result<(), Box<dyn Error>> {
+pub fn run(
+    input_bed: &str,
+    support_read_file: &str,
+    bam_file: &str,
+    min_identity: f64,
+    min_length: usize,
+) -> Result<(), Box<dyn Error>> {
     // open bed file including SV breakpoint information with ±100 bp sequence
     let bp_reader = open_file(input_bed).expect(&format!("Could not open file {}", input_bed));
     let mut bp_info_db: HashSet<SVInfo> = HashSet::new();
@@ -84,7 +89,7 @@ pub fn run(input_bed: &str, support_read_file: &str, bam_file: &str, min_identit
         match i % 2 {
             0 => {
                 line1_info = line;
-            },
+            }
             1 => {
                 let mut info = SVInfo::new();
                 let split_line_1: Vec<&str> = line1_info.split('\t').collect();
@@ -100,9 +105,9 @@ pub fn run(input_bed: &str, support_read_file: &str, bam_file: &str, min_identit
                 let seq_2 = split_line_2[4].as_bytes();
                 info.add_bp2_info(sv_id_2, contig_2, position_2, &seq_2);
                 bp_info_db.insert(info.clone());
-            },
+            }
             _ => (),
-        }    
+        }
     }
 
     // grouping identical SVs by smith-waterman algorithm
@@ -116,41 +121,69 @@ pub fn run(input_bed: &str, support_read_file: &str, bam_file: &str, min_identit
                 continue;
             }
             let sv_type2 = &sv_info_2.sv_id[0..1];
-            
+
             if sv_type1 == "d" && sv_type2 == "i" {
                 continue;
             }
             // smith_waterman algorithm
-            let result1 = match smith_waterman::run(&sv_info_1.bp1_seq, &sv_info_2.bp1_seq, min_identity, min_length) {
+            let result1 = match smith_waterman::run(
+                &sv_info_1.bp1_seq,
+                &sv_info_2.bp1_seq,
+                min_identity,
+                min_length,
+            ) {
                 Ok(flag) => flag,
                 _ => false,
             };
-            let result2 = match smith_waterman::run(&sv_info_1.bp1_seq, &sv_info_2.bp2_seq, min_identity, min_length) {
+            let result2 = match smith_waterman::run(
+                &sv_info_1.bp1_seq,
+                &sv_info_2.bp2_seq,
+                min_identity,
+                min_length,
+            ) {
                 Ok(flag) => flag,
                 _ => false,
             };
-            
+
             if result1 && !result2 {
                 let pattern = 0;
-                let result = match smith_waterman::run(&sv_info_1.bp2_seq, &sv_info_2.bp2_seq, min_identity, min_length) {
+                let result = match smith_waterman::run(
+                    &sv_info_1.bp2_seq,
+                    &sv_info_2.bp2_seq,
+                    min_identity,
+                    min_length,
+                ) {
                     Ok(flag) => flag,
                     _ => false,
                 };
                 if result {
                     eprintln!("{}\t{}\t{}", sv_info_1.sv_id, sv_info_2.sv_id, pattern);
                     // update breakpoint information
-                    identical_pairs.push((sv_info_1.sv_id.clone(), sv_info_2.sv_id.clone(), pattern));
+                    identical_pairs.push((
+                        sv_info_1.sv_id.clone(),
+                        sv_info_2.sv_id.clone(),
+                        pattern,
+                    ));
                 }
             } else {
                 let pattern = 1;
-                let result = match smith_waterman::run(&sv_info_1.bp2_seq, &sv_info_2.bp1_seq, min_identity, min_length) {           
+                let result = match smith_waterman::run(
+                    &sv_info_1.bp2_seq,
+                    &sv_info_2.bp1_seq,
+                    min_identity,
+                    min_length,
+                ) {
                     Ok(flag) => flag,
                     _ => false,
                 };
                 if result {
                     eprintln!("{}\t{}\t{}", sv_info_1.sv_id, sv_info_2.sv_id, pattern);
                     // update breakpoint information
-                    identical_pairs.push((sv_info_1.sv_id.clone(), sv_info_2.sv_id.clone(), pattern));
+                    identical_pairs.push((
+                        sv_info_1.sv_id.clone(),
+                        sv_info_2.sv_id.clone(),
+                        pattern,
+                    ));
                 }
             }
         }
@@ -161,7 +194,10 @@ pub fn run(input_bed: &str, support_read_file: &str, bam_file: &str, min_identit
     for pair in identical_pairs {
         let mut found = false;
         for group in &mut groups {
-            if group.iter().any(|x| x.0 == pair.0 || x.1 == pair.0 || x.0 == pair.1 || x.1 == pair.1) {
+            if group
+                .iter()
+                .any(|x| x.0 == pair.0 || x.1 == pair.0 || x.0 == pair.1 || x.1 == pair.1)
+            {
                 group.push(pair.clone());
                 found = true;
                 break;
@@ -182,7 +218,9 @@ pub fn run(input_bed: &str, support_read_file: &str, bam_file: &str, min_identit
         for pair in pairs {
             match pair.2 {
                 0 => {
-                    if info.identical_bp2.contains(&(pair.0.clone(), 1)) || info.identical_bp2.contains(&(pair.1.clone(), 1)) {
+                    if info.identical_bp2.contains(&(pair.0.clone(), 1))
+                        || info.identical_bp2.contains(&(pair.1.clone(), 1))
+                    {
                         info.add_identical_bp1(pair.0.clone(), 2);
                         info.add_identical_bp2(pair.0.clone(), 1);
                         info.add_identical_bp1(pair.1.clone(), 2);
@@ -192,10 +230,12 @@ pub fn run(input_bed: &str, support_read_file: &str, bam_file: &str, min_identit
                         info.add_identical_bp2(pair.0.clone(), 2);
                         info.add_identical_bp1(pair.1.clone(), 1);
                         info.add_identical_bp2(pair.1.clone(), 2);
-                    } 
-                },
+                    }
+                }
                 1 => {
-                    if info.identical_bp2.contains(&(pair.0.clone(), 1)) || info.identical_bp2.contains(&(pair.1.clone(), 2)) {
+                    if info.identical_bp2.contains(&(pair.0.clone(), 1))
+                        || info.identical_bp2.contains(&(pair.1.clone(), 2))
+                    {
                         info.add_identical_bp1(pair.0.clone(), 2);
                         info.add_identical_bp2(pair.0.clone(), 1);
                         info.add_identical_bp1(pair.1.clone(), 1);
@@ -205,8 +245,8 @@ pub fn run(input_bed: &str, support_read_file: &str, bam_file: &str, min_identit
                         info.add_identical_bp2(pair.0.clone(), 2);
                         info.add_identical_bp1(pair.1.clone(), 2);
                         info.add_identical_bp2(pair.1.clone(), 1);
-                    } 
-                },
+                    }
+                }
                 _ => (),
             }
             if !group_db_key.contains(&pair.0) {
@@ -218,13 +258,19 @@ pub fn run(input_bed: &str, support_read_file: &str, bam_file: &str, min_identit
         }
         group_db.insert(group_db_key.clone(), info.clone());
     }
-    
+
     let _ = classify_haplotype_fetch_bam(&group_db, &bp_info_db, support_read_file, bam_file);
     Ok(())
 }
 
-fn classify_haplotype_fetch_bam(group_db: &HashMap<Vec<String>, IdenticalInfo>, bp_info_db: &HashSet<SVInfo>, support_read_file: &str, bam_file: &str) -> Result<(), Box<dyn Error>> {
-    let reader = open_file(support_read_file).expect(&format!("Could not open {}", support_read_file));
+fn classify_haplotype_fetch_bam(
+    group_db: &HashMap<Vec<String>, IdenticalInfo>,
+    bp_info_db: &HashSet<SVInfo>,
+    support_read_file: &str,
+    bam_file: &str,
+) -> Result<(), Box<dyn Error>> {
+    let reader =
+        open_file(support_read_file).expect(&format!("Could not open {}", support_read_file));
     let mut read_db: HashMap<String, Vec<String>> = HashMap::new();
     // collect support reads of SVs
     for line in reader.lines() {
@@ -239,7 +285,8 @@ fn classify_haplotype_fetch_bam(group_db: &HashMap<Vec<String>, IdenticalInfo>, 
         }
     }
 
-    let mut bam = IndexedReader::from_path(&bam_file).expect(&format!("Could not open {}", bam_file));
+    let mut bam =
+        IndexedReader::from_path(&bam_file).expect(&format!("Could not open {}", bam_file));
     let mut hap_db: HashMap<String, HashMap<usize, Vec<usize>>> = HashMap::new();
     let header = Header::from_template(bam.header());
     let mut reference_sizes: HashMap<String, usize> = HashMap::new();
@@ -249,7 +296,7 @@ fn classify_haplotype_fetch_bam(group_db: &HashMap<Vec<String>, IdenticalInfo>, 
         for record in records {
             if key != "SQ" {
                 continue;
-            } 
+            }
             let size = record["LN"].parse::<usize>().unwrap();
             reference_sizes.insert(record["SN"].clone(), size);
         }
@@ -267,7 +314,7 @@ fn classify_haplotype_fetch_bam(group_db: &HashMap<Vec<String>, IdenticalInfo>, 
             continue;
         }
 
-        let start = if info.bp1_pos >  100 {
+        let start = if info.bp1_pos > 100 {
             info.bp1_pos - 100
         } else {
             0
@@ -283,10 +330,17 @@ fn classify_haplotype_fetch_bam(group_db: &HashMap<Vec<String>, IdenticalInfo>, 
             info.bp1_pos + 100
         };
         let _ = bam.fetch((&info.bp1_contig, start as u64, end as u64));
+        let mut counted_qname: HashSet<String> = HashSet::new();
         for record in bam.records() {
             let record = record?;
             let qname = String::from_utf8(record.qname().to_vec())?;
             if support_reads.contains(&qname) {
+                // inhibit duplicate count
+                if counted_qname.contains(&qname) {
+                    continue;
+                } else {
+                    counted_qname.insert(qname.clone());
+                }
                 let mut hap = 0;
                 for aux in record.aux_iter() {
                     let (tag, value) = aux?;
@@ -294,10 +348,10 @@ fn classify_haplotype_fetch_bam(group_db: &HashMap<Vec<String>, IdenticalInfo>, 
                         continue;
                     }
                     if value == rust_htslib::bam::record::Aux::String("HP1") {
-                    // if value == rust_htslib::bam::record::Aux::U8(1) {
+                        // if value == rust_htslib::bam::record::Aux::U8(1) {
                         hap = 1;
                     } else if value == rust_htslib::bam::record::Aux::String("HP2") {
-                    // else if value == rust_htslib::bam::record::Aux::U8(2) {
+                        // else if value == rust_htslib::bam::record::Aux::U8(2) {
                         hap = 2;
                     } else {
                         hap = 0;
@@ -321,17 +375,18 @@ fn classify_haplotype_fetch_bam(group_db: &HashMap<Vec<String>, IdenticalInfo>, 
                         vec![1, 0, 0]
                     } else if hap == 1 {
                         vec![0, 1, 0]
-                        } else {
+                    } else {
                         vec![0, 0, 1]
                     };
-                    let tmp_bp_map: HashMap<usize, Vec<usize>> = HashMap::from([(1, new_hap_cnt_vec)]);
+                    let tmp_bp_map: HashMap<usize, Vec<usize>> =
+                        HashMap::from([(1, new_hap_cnt_vec)]);
                     hap_db.insert(sv_id.clone(), tmp_bp_map);
                 }
             } else {
                 continue;
             }
         }
-        let start = if info.bp2_pos >  100 {
+        let start = if info.bp2_pos > 100 {
             info.bp2_pos - 100
         } else {
             0
@@ -347,10 +402,17 @@ fn classify_haplotype_fetch_bam(group_db: &HashMap<Vec<String>, IdenticalInfo>, 
             info.bp2_pos + 100
         };
         let _ = bam.fetch((&info.bp2_contig, start as u64, end as u64));
+        let mut counted_qname: HashSet<String> = HashSet::new();
         for record in bam.records() {
             let record = record?;
             let qname = String::from_utf8(record.qname().to_vec())?;
             if support_reads.contains(&qname) {
+                // inhibit duplicate count
+                if counted_qname.contains(&qname) {
+                    continue;
+                } else {
+                    counted_qname.insert(qname.clone());
+                }
                 let mut hap = 0;
                 for aux in record.aux_iter() {
                     let (tag, value) = aux?;
@@ -383,10 +445,11 @@ fn classify_haplotype_fetch_bam(group_db: &HashMap<Vec<String>, IdenticalInfo>, 
                         vec![1, 0, 0]
                     } else if hap == 1 {
                         vec![0, 1, 0]
-                        } else {
+                    } else {
                         vec![0, 0, 1]
                     };
-                    let tmp_bp_map: HashMap<usize, Vec<usize>> = HashMap::from([(2, new_hap_cnt_vec)]);
+                    let tmp_bp_map: HashMap<usize, Vec<usize>> =
+                        HashMap::from([(2, new_hap_cnt_vec)]);
                     hap_db.insert(sv_id.clone(), tmp_bp_map);
                 }
             } else {
@@ -455,10 +518,26 @@ fn classify_haplotype_fetch_bam(group_db: &HashMap<Vec<String>, IdenticalInfo>, 
                 }
             }
         }
-        
-        eprintln!("{:?}\t{:?}\t{:?}\t{:?}\t{:?}", key, value.identical_bp1, value.identical_bp2, sv_bp1_cnt, sv_bp2_cnt);
-        print!("{}\t{}\t{}", key.join(","), sv_bp1_cnt.iter().map(ToString::to_string).collect::<Vec<String>>().join(","), sv_bp2_cnt.iter().map(ToString::to_string).collect::<Vec<String>>().join(","));
-        
+
+        eprintln!(
+            "{:?}\t{:?}\t{:?}\t{:?}\t{:?}",
+            key, value.identical_bp1, value.identical_bp2, sv_bp1_cnt, sv_bp2_cnt
+        );
+        print!(
+            "{}\t{}\t{}",
+            key.join(","),
+            sv_bp1_cnt
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<String>>()
+                .join(","),
+            sv_bp2_cnt
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<String>>()
+                .join(",")
+        );
+
         if sv_bp1_cnt[1] == 0 && sv_bp1_cnt[2] == 0 {
             unassigned += 1;
             print!("\tUnassigned\t-");
@@ -468,9 +547,9 @@ fn classify_haplotype_fetch_bam(group_db: &HashMap<Vec<String>, IdenticalInfo>, 
         } else {
             assigned += 1;
             if sv_bp1_cnt[1] > 0 {
-                print!("\thaplotype_1\t{},{}", max_sv1_id[1].0, max_sv1_id[1].1);
+                print!("\thaplotype1\t{},{}", max_sv1_id[1].0, max_sv1_id[1].1);
             } else {
-                print!("\thaplotype_2\t{},{}", max_sv1_id[2].0, max_sv1_id[2].1);
+                print!("\thaplotype2\t{},{}", max_sv1_id[2].0, max_sv1_id[2].1);
             }
         }
 
@@ -483,9 +562,9 @@ fn classify_haplotype_fetch_bam(group_db: &HashMap<Vec<String>, IdenticalInfo>, 
         } else {
             assigned += 1;
             if sv_bp2_cnt[1] > 0 {
-                println!("\thaplotype_1\t{},{}", max_sv2_id[1].0, max_sv2_id[1].1);
+                println!("\thaplotype1\t{},{}", max_sv2_id[1].0, max_sv2_id[1].1);
             } else {
-                println!("\thaplotype_2\t{},{}", max_sv2_id[2].0, max_sv2_id[2].1);
+                println!("\thaplotype2\t{},{}", max_sv2_id[2].0, max_sv2_id[2].1);
             }
         }
     }
