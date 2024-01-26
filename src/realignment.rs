@@ -347,11 +347,11 @@ fn classify_haplotype_fetch_bam(
                     if tag != b"HP" {
                         continue;
                     }
-                    if value == rust_htslib::bam::record::Aux::String("HP1") {
-                        // if value == rust_htslib::bam::record::Aux::U8(1) {
+                    // if value == rust_htslib::bam::record::Aux::String("HP1") {
+                    if value == rust_htslib::bam::record::Aux::U8(1) {
                         hap = 1;
-                    } else if value == rust_htslib::bam::record::Aux::String("HP2") {
-                        // else if value == rust_htslib::bam::record::Aux::U8(2) {
+                    //v} else if value == rust_htslib::bam::record::Aux::String("HP2") {
+                    } else if value == rust_htslib::bam::record::Aux::U8(2) {
                         hap = 2;
                     } else {
                         hap = 0;
@@ -419,9 +419,9 @@ fn classify_haplotype_fetch_bam(
                     if tag != b"HP" {
                         continue;
                     }
-                    if value == rust_htslib::bam::record::Aux::String("HP1") {
+                    if value == rust_htslib::bam::record::Aux::U8(1) {
                         hap = 1;
-                    } else if value == rust_htslib::bam::record::Aux::String("HP2") {
+                    } else if value == rust_htslib::bam::record::Aux::U8(2) {
                         hap = 2;
                     } else {
                         hap = 0;
