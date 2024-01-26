@@ -406,11 +406,11 @@ pub fn run(
                     if tag != b"HP" {
                         continue;
                     }
-                    if value == rust_htslib::bam::record::Aux::String("HP1") {
-                        // if value == rust_htslib::bam::record::Aux::U8(1) {
+                    //if value == rust_htslib::bam::record::Aux::String("HP1") {
+                    if value == rust_htslib::bam::record::Aux::U8(1) {
                         hap1 += 1;
-                    } else if value == rust_htslib::bam::record::Aux::String("HP2") {
-                        // else if value == rust_htslib::bam::record::Aux::U8(2) {
+                    // } else if value == rust_htslib::bam::record::Aux::String("HP2") {
+                    } else if value == rust_htslib::bam::record::Aux::U8(2) {
                         hap2 += 1;
                     } else {
                         unassign += 1;
