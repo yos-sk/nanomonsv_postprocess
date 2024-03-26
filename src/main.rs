@@ -3,9 +3,10 @@ use std::process;
 
 mod filt;
 mod realignment;
+mod extract_seq;
 
 #[derive(Parser)]
-#[command(author = "Yoshitaka Sakamoto", version = "0.2.1", about = "Post process of nanomonsv", long_about = None)]
+#[command(author = "Yoshitaka Sakamoto", version = "0.2.2", about = "Post process of nanomonsv", long_about = None)]
 
 struct Arguments {
     #[command(subcommand)]
@@ -14,6 +15,14 @@ struct Arguments {
 
 #[derive(Subcommand)]
 enum Commands {
+    ExtractSeq {
+        #[arg(short = 'b', long)]
+        input_bed: String,
+
+        #[arg(short = 'f', long)]
+        reference_fasta: String,
+    },
+
     Realignment {
         #[arg(short = 'i', long)]
         input_bed: String,
@@ -49,6 +58,19 @@ enum Commands {
 fn main() {
     let arguments = Arguments::parse();
     match &arguments.command {
+        Commands::ExtractSeq {
+            input_bed,
+            reference_fasta,
+        } => {
+            if let Err(error) = extract_seq::run(
+                input_bed,
+                reference_fasta,
+            ) {
+                eprintln!("{}", error);
+                process::exit(1);
+            }
+        },
+
         Commands::Realignment {
             input_bed,
             support_read_file,
@@ -68,7 +90,7 @@ fn main() {
                 eprintln!("{}", error);
                 process::exit(1);
             }
-        }
+        },
 
         Commands::Filt {
             identical_file,
@@ -85,6 +107,6 @@ fn main() {
                 eprintln!("{}", error);
                 process::exit(1);
             }
-        }
+        },
     }
 }
