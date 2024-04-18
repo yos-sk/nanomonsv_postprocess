@@ -13,10 +13,10 @@ pub fn run(input_bed: &str, reference_fasta: &str) -> Result<(), Box<dyn Error>>
         let line = line?;
         let split_line: Vec<&str> = line.split('\t').collect();
         let contig = split_line[0];
-        let pos = split_line[1].parse::<usize>().unwrap();
-        let start = max(0, pos - 100);
-        let length = fasta_reader.fetch_seq_len(contig) as usize;
-        let end =  min(pos + 101, length);
+        let pos = split_line[1].parse::<isize>().unwrap();
+        let start = max(0, pos - 100) as usize;
+        let length = fasta_reader.fetch_seq_len(contig) as isize;
+        let end =  min(pos + 101, length) as usize;
 
         let seq = fasta_reader.fetch_seq_string(contig, start, end).expect(&format!("Could not fetch {}:{}-{}", contig, start, end));
 
