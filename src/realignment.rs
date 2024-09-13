@@ -191,21 +191,34 @@ pub fn run(
 
     // grouping
     let mut groups: Vec<Vec<(String, String, usize)>> = Vec::new();
+    //let mut cnt = 0;
     for pair in identical_pairs {
-        let mut found = false;
-        for group in &mut groups {
+        //cnt += 1;
+        //let mut found = false;
+        //eprintln!("{}, {:?}", cnt, groups);
+        let mut t_groups: Vec<Vec<(String, String, usize)>> = Vec::new();
+        let mut t_group: Vec<(String, String, usize)> = vec![pair.clone()];
+        for group in groups.iter() {
             if group
                 .iter()
                 .any(|x| x.0 == pair.0 || x.1 == pair.0 || x.0 == pair.1 || x.1 == pair.1)
             {
-                group.push(pair.clone());
-                found = true;
-                break;
+                for t_pair in group.iter() {
+                    t_group.push(t_pair.clone());
+                }
+
+                //group.push(pair.clone());
+                //found = true;
+                //break;
+            } else {
+                t_groups.push(group.to_vec());
             }
         }
-        if !found {
+        /*if !found {
             groups.push(vec![pair.clone()]);
-        }
+        }*/
+        t_groups.push(t_group);
+        groups = t_groups.clone();
     }
 
     let mut group_db: HashMap<Vec<String>, IdenticalInfo> = HashMap::new();
