@@ -4,6 +4,7 @@ use std::process;
 mod filt;
 mod realignment;
 mod extract_seq;
+mod merge;
 
 #[derive(Parser)]
 #[command(author = "Yoshitaka Sakamoto", version = "0.2.3", about = "Post process of nanomonsv", long_about = None)]
@@ -53,6 +54,23 @@ enum Commands {
         #[arg(short = 'b', long)]
         bam_file: String,
     },
+
+    Merge {
+        #[arg(short = 'i', long)]
+        input_file_1: String,
+
+        #[arg(short = 'j', long)]
+        input_file_2: String,
+
+        #[arg(short = 'o', long)]
+        output_file: String,
+
+        #[arg(short = 'm', long, default_value = "50")]
+        coord_margin: String,
+
+        #[arg(short = 's', long, default_value = "98.0")]
+        inserted_seq_identity: String,
+    }
 }
 
 fn main() {
@@ -103,6 +121,27 @@ fn main() {
                 nanomonsv_result,
                 support_read_file,
                 bam_file,
+            ) {
+                eprintln!("{}", error);
+                process::exit(1);
+            }
+        },
+
+        Commands::Merge {
+            input_file_1,
+            input_file_2,
+            output_file,
+            coord_margin,
+            inserted_seq_identity,
+        } => {
+            let coord_margin: isize = coord_margin.parse().unwrap_or(50);
+            let inserted_seq_identity: f64 = inserted_seq_identity.parse().unwrap_or(98.0);
+            if let Err(error) = merge::run(
+                input_file_1,
+                input_file_2,
+                output_file,
+                coord_margin,
+                inserted_seq_identity,
             ) {
                 eprintln!("{}", error);
                 process::exit(1);
