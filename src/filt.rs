@@ -164,8 +164,7 @@ pub fn run(
             }
         }
 
-        if bp1_cat.starts_with("haplotype") && bp2_cat.starts_with("haplotype")
-        {
+        if bp1_cat.starts_with("haplotype") && bp2_cat.starts_with("haplotype") {
             let bp1_sv_id = bp1_info[0].to_string();
             let bp1_bp_num = bp1_info[1].parse::<usize>().unwrap();
             let bp2_sv_id = bp2_info[0].to_string();
@@ -375,9 +374,9 @@ pub fn run(
                     bp2_cat.clone(),
                 )
             };
-            
+
             new_nanomonsv_result.push(new_sv_info);
-        }  else {
+        } else {
             let mut max_sv_id = String::new();
             let mut n_read = 0;
             for sv_id in key.iter() {
@@ -627,7 +626,9 @@ pub fn run(
     // write new nanomonsv results
     println!("Chr_1\tPos_1\tDir_1\tChr_2\tPos_2\tDir_2\tInserted_Seq\tSV_ID\tChecked_Read_Num_Tumor\tSupporting_Read_Num_Tumor\tChecked_Read_Num_Control\tSupporting_Read_Num_Control\tIs_Filter\tIdentical_SVs\tSupporting_Read_Num_Total\tHaplotype_bp1\tHaplotype_bp2");
     for result in new_nanomonsv_result.iter() {
-        if result.bp1_contig > result.bp2_contig || (result.bp1_contig == result.bp2_contig && result.bp1_pos > result.bp2_pos) {
+        if result.bp1_contig > result.bp2_contig
+            || (result.bp1_contig == result.bp2_contig && result.bp1_pos > result.bp2_pos)
+        {
             println!(
                 "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
                 result.bp2_contig,

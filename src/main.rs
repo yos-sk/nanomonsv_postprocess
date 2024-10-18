@@ -1,10 +1,10 @@
 use clap::{Parser, Subcommand};
 use std::process;
 
-mod filt;
-mod realignment;
 mod extract_seq;
+mod filt;
 mod merge;
+mod realignment;
 
 #[derive(Parser)]
 #[command(author = "Yoshitaka Sakamoto", version = "0.2.3", about = "Post process of nanomonsv", long_about = None)]
@@ -70,7 +70,7 @@ enum Commands {
 
         #[arg(short = 's', long, default_value = "98.0")]
         inserted_seq_identity: String,
-    }
+    },
 }
 
 fn main() {
@@ -80,14 +80,11 @@ fn main() {
             input_bed,
             reference_fasta,
         } => {
-            if let Err(error) = extract_seq::run(
-                input_bed,
-                reference_fasta,
-            ) {
+            if let Err(error) = extract_seq::run(input_bed, reference_fasta) {
                 eprintln!("{}", error);
                 process::exit(1);
             }
-        },
+        }
 
         Commands::Realignment {
             input_bed,
@@ -108,7 +105,7 @@ fn main() {
                 eprintln!("{}", error);
                 process::exit(1);
             }
-        },
+        }
 
         Commands::Filt {
             identical_file,
@@ -125,7 +122,7 @@ fn main() {
                 eprintln!("{}", error);
                 process::exit(1);
             }
-        },
+        }
 
         Commands::Merge {
             input_file_1,
@@ -146,6 +143,6 @@ fn main() {
                 eprintln!("{}", error);
                 process::exit(1);
             }
-        },
+        }
     }
 }
