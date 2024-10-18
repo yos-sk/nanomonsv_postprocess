@@ -627,26 +627,49 @@ pub fn run(
     // write new nanomonsv results
     println!("Chr_1\tPos_1\tDir_1\tChr_2\tPos_2\tDir_2\tInserted_Seq\tSV_ID\tChecked_Read_Num_Tumor\tSupporting_Read_Num_Tumor\tChecked_Read_Num_Control\tSupporting_Read_Num_Control\tIs_Filter\tIdentical_SVs\tSupporting_Read_Num_Total\tHaplotype_bp1\tHaplotype_bp2");
     for result in new_nanomonsv_result.iter() {
-        println!(
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
-            result.bp1_contig,
-            result.bp1_pos,
-            result.bp1_strand,
-            result.bp2_contig,
-            result.bp2_pos,
-            result.bp2_strand,
-            result.insert_seq,
-            result.sv_id,
-            result.total_read,
-            result.support_read,
-            result.control_total_read,
-            result.control_support_read,
-            result.is_filter,
-            result.identical,
-            result.total_support_read,
-            result.bp1_haplotype,
-            result.bp2_haplotype
-        );
+        if result.bp1_contig > result.bp2_contig || (result.bp1_contig == result.bp2_contig && result.bp1_pos > result.bp2_pos) {
+            println!(
+                "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+                result.bp2_contig,
+                result.bp2_pos,
+                result.bp2_strand,
+                result.bp1_contig,
+                result.bp1_pos,
+                result.bp1_strand,
+                result.insert_seq,
+                result.sv_id,
+                result.total_read,
+                result.support_read,
+                result.control_total_read,
+                result.control_support_read,
+                result.is_filter,
+                result.identical,
+                result.total_support_read,
+                result.bp2_haplotype,
+                result.bp1_haplotype,
+            );
+        } else {
+            println!(
+                "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+                result.bp1_contig,
+                result.bp1_pos,
+                result.bp1_strand,
+                result.bp2_contig,
+                result.bp2_pos,
+                result.bp2_strand,
+                result.insert_seq,
+                result.sv_id,
+                result.total_read,
+                result.support_read,
+                result.control_total_read,
+                result.control_support_read,
+                result.is_filter,
+                result.identical,
+                result.total_support_read,
+                result.bp1_haplotype,
+                result.bp2_haplotype,
+            );
+        }
     }
 
     eprintln!("Recording new SV results finished.");
