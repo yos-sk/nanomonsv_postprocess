@@ -498,23 +498,6 @@ fn classify_haplotype_fetch_bam(
                                     .or_insert_with(Vec::new)
                                     .push((sv_id, bp_num, cnt_vec[2]));
                     }
-                    /*
-                    // Unassigned
-                    if cnt_vec[0] > max_sv1_cnt[0] {
-                        max_sv1_cnt[0] = cnt_vec[0];
-                        max_sv1_id[0] = (sv_id.clone(), bp_num);
-                    }
-                    // haplotype 1
-                    if cnt_vec[1] > max_sv1_cnt[1] {
-                        max_sv1_cnt[1] = cnt_vec[1];
-                        max_sv1_id[1] = (sv_id.clone(), bp_num);
-                    }
-                    // haplotype 2
-                    if cnt_vec[2] > max_sv1_cnt[2] {
-                        max_sv1_cnt[2] = cnt_vec[2];
-                        max_sv1_id[2] = (sv_id.clone(), bp_num);
-                    }
-                    */
                 }
             }
         }
