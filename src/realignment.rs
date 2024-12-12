@@ -476,8 +476,9 @@ fn classify_haplotype_fetch_bam(
     let mut unassigned = 0;
     for (key, value) in group_db.iter() {
         let mut sv_bp1_cnt = vec![0, 0, 0];
-        let mut max_sv1_id = vec![(String::new(), 0); 3];
-        let mut max_sv1_cnt = vec![0, 0, 0];
+        let mut sv_bp1_map: HashMap<usize, Vec<(String, usize, usize)>> = HashMap::new();
+        // let mut max_sv1_id = vec![(String::new(), 0); 3];
+        // let mut max_sv1_cnt = vec![0, 0, 0];
         // iterate by value, then count haplotype
         // breakpoint 1
         for item in value.identical_bp1.iter() {
@@ -488,25 +489,40 @@ fn classify_haplotype_fetch_bam(
                     sv_bp1_cnt[0] += cnt_vec[0];
                     sv_bp1_cnt[1] += cnt_vec[1];
                     sv_bp1_cnt[2] += cnt_vec[2];
+                    if cnt_vec[1] > 0 {
+                        sv_bp1_map.entry(1)
+                                    .or_insert_with(Vec::new)
+                                    .push((sv_id, bp_num, cnt_vec[1]));
+                    } else if cnt_vec[2] > 0 {
+                        sv_bp1_map.entry(2)
+                                    .or_insert_with(Vec::new)
+                                    .push((sv_id, bp_num, cnt_vec[2]));
+                    }
+                    /*
+                    // Unassigned
                     if cnt_vec[0] > max_sv1_cnt[0] {
                         max_sv1_cnt[0] = cnt_vec[0];
                         max_sv1_id[0] = (sv_id.clone(), bp_num);
                     }
+                    // haplotype 1
                     if cnt_vec[1] > max_sv1_cnt[1] {
                         max_sv1_cnt[1] = cnt_vec[1];
                         max_sv1_id[1] = (sv_id.clone(), bp_num);
                     }
+                    // haplotype 2
                     if cnt_vec[2] > max_sv1_cnt[2] {
                         max_sv1_cnt[2] = cnt_vec[2];
                         max_sv1_id[2] = (sv_id.clone(), bp_num);
                     }
+                    */
                 }
             }
         }
 
         let mut sv_bp2_cnt = vec![0, 0, 0];
-        let mut max_sv2_id = vec![(String::new(), 0); 3];
-        let mut max_sv2_cnt = vec![0, 0, 0];
+        // let mut max_sv2_id = vec![(String::new(), 0); 3];
+        // let mut max_sv2_cnt = vec![0, 0, 0];
+        let mut sv_bp2_map: HashMap<usize, Vec<(String, usize, usize)>> = HashMap::new();
         // breakpoint 2
         for item in value.identical_bp2.iter() {
             let sv_id = (&item.0).to_string();
@@ -516,18 +532,36 @@ fn classify_haplotype_fetch_bam(
                     sv_bp2_cnt[0] += cnt_vec[0];
                     sv_bp2_cnt[1] += cnt_vec[1];
                     sv_bp2_cnt[2] += cnt_vec[2];
+                    if cnt_vec[1] > 0 {
+                        sv_bp2_map.entry(1)
+                                    .or_insert_with(Vec::new)
+                                    .push((sv_id, bp_num, cnt_vec[1]));
+                    } else if cnt_vec[2] > 0 {
+                        sv_bp2_map.entry(2)
+                                    .or_insert_with(Vec::new)
+                                    .push((sv_id, bp_num, cnt_vec[2]));
+                    }
+                    /*
+                    // Unassigned
                     if cnt_vec[0] > max_sv2_cnt[0] {
                         max_sv2_cnt[0] = cnt_vec[0];
                         max_sv2_id[0] = (sv_id.clone(), bp_num);
+                    } else if cnt_cev[0] == max_sv2_cnt[0] {
+                        if sv_id == max_sv1_id[0] {
+                            max_sv2_id[0] = (sv_id.clone(), bp_num);
+                        }
                     }
+                    // haplotype 1
                     if cnt_vec[1] > max_sv2_cnt[1] {
                         max_sv2_cnt[1] = cnt_vec[1];
                         max_sv2_id[1] = (sv_id.clone(), bp_num);
                     }
+                    // haplotype 2
                     if cnt_vec[2] > max_sv2_cnt[2] {
                         max_sv2_cnt[2] = cnt_vec[2];
                         max_sv2_id[2] = (sv_id.clone(), bp_num);
                     }
+                    */
                 }
             }
         }
@@ -556,13 +590,45 @@ fn classify_haplotype_fetch_bam(
             print!("\tUnassigned\t-");
         } else if sv_bp1_cnt[1] > 0 && sv_bp1_cnt[2] > 0 {
             ambiguous += 1;
-            print!("\tAmbiguous\t-");
+            print!("\tAmbiguous");
+            if let Some(vec) = sv_bp1_map.get(&1) {
+                for (i, (sv_id, bp, n_read)) in vec.into_iter().enumerate() {
+                    if i == 0 {
+                        print!("\t{},{},{}", sv_id, bp, n_read);
+                    } else {
+                        print!(";{},{},{}", sv_id, bp, n_read);
+                    }
+                }
+            }
+            if let Some(vec) = sv_bp1_map.get(&2) {
+                for (sv_id, bp, n_read) in vec {
+                    print!(";{},{},{}", sv_id, bp, n_read);
+                }
+            }
         } else {
             assigned += 1;
             if sv_bp1_cnt[1] > 0 {
-                print!("\thaplotype1\t{},{}", max_sv1_id[1].0, max_sv1_id[1].1);
+                print!("\thaplotype1");
+                if let Some(vec) = sv_bp1_map.get(&1) {
+                    for (i, (sv_id, bp, n_read)) in vec.into_iter().enumerate() {
+                        if i == 0 {
+                            print!("\t{},{},{}", sv_id, bp, n_read);
+                        } else {
+                            print!(";{},{},{}", sv_id, bp, n_read);
+                        }
+                    }
+                }
             } else {
-                print!("\thaplotype2\t{},{}", max_sv1_id[2].0, max_sv1_id[2].1);
+                print!("\thaplotype2");
+                if let Some(vec) = sv_bp1_map.get(&2) {
+                    for (i, (sv_id, bp, n_read)) in vec.into_iter().enumerate() {
+                        if i == 0 {
+                            print!("\t{},{},{}", sv_id, bp, n_read);
+                        } else {
+                            print!(";{},{},{}", sv_id, bp, n_read);
+                        }
+                    }
+                }
             }
         }
 
@@ -571,14 +637,48 @@ fn classify_haplotype_fetch_bam(
             println!("\tUnassigned\t-");
         } else if sv_bp2_cnt[1] > 0 && sv_bp2_cnt[2] > 0 {
             ambiguous += 1;
-            println!("\tAmbiguous\t-");
+            print!("\tAmbiguous");
+            if let Some(vec) = sv_bp2_map.get(&1) {
+                for (i, (sv_id, bp, n_read)) in vec.into_iter().enumerate() {
+                    if i == 0 {
+                        print!("\t{},{},{}", sv_id, bp, n_read);
+                    } else {
+                        print!(";{},{},{}", sv_id, bp, n_read);
+                    }
+                }
+            }
+            if let Some(vec) = sv_bp2_map.get(&2) {
+                for (sv_id, bp, n_read) in vec {
+                    print!(";{},{},{}", sv_id, bp, n_read);
+                }
+            }
+            print!("\n");
         } else {
             assigned += 1;
             if sv_bp2_cnt[1] > 0 {
-                println!("\thaplotype1\t{},{}", max_sv2_id[1].0, max_sv2_id[1].1);
+                print!("\thaplotype1");
+                if let Some(vec) = sv_bp2_map.get(&1) {
+                    for (i, (sv_id, bp, n_read)) in vec.into_iter().enumerate() {
+                        if i == 0 {
+                            print!("\t{},{},{}", sv_id, bp, n_read);
+                        } else {
+                            print!(";{},{},{}", sv_id, bp, n_read);
+                        }
+                    }
+                }
             } else {
-                println!("\thaplotype2\t{},{}", max_sv2_id[2].0, max_sv2_id[2].1);
+                print!("\thaplotype2");
+                if let Some(vec) = sv_bp2_map.get(&2) {
+                    for (i, (sv_id, bp, n_read)) in vec.into_iter().enumerate() {
+                        if i == 0 {
+                            print!("\t{},{},{}", sv_id, bp, n_read);
+                        } else {
+                            print!(";{},{},{}", sv_id, bp, n_read);
+                        }
+                    }
+                }
             }
+            print!("\n");
         }
     }
 

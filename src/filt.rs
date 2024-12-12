@@ -150,235 +150,108 @@ pub fn run(
             );
         }
         let bp1_cat = split_line[3].to_string();
-        let bp1_info: Vec<&str> = split_line[4].split(',').collect();
+        let t_bp1_info: Vec<&str> = split_line[4].split(';').collect();
+        let mut bp1_info: Vec<(String, usize, usize)> = Vec::new();
+        for info in &t_bp1_info {
+            if *info == "-" {
+                bp1_info.push(("-".to_string(), 0, 0));
+                break;
+            }
+            let split_info: Vec<&str> = info.split(",").collect();
+            let t_sv_id: String = split_info[0].to_string();
+            let bp: usize = split_info[1].parse::<usize>().unwrap();
+            let n_read: usize = split_info[2].parse::<usize>().unwrap();
+            bp1_info.push((t_sv_id, bp, n_read));
+        }
         let bp2_cat = split_line[5].to_string();
-        let bp2_info: Vec<&str> = split_line[6].split(',').collect();
-        let mut identical: String = String::new();
+        let t_bp2_info: Vec<&str> = split_line[6].split(';').collect();
+        let mut bp2_info: Vec<(String, usize, usize)> = Vec::new();
+        for info in &t_bp2_info {
+            if *info == "-" {
+                bp2_info.push(("-".to_string(), 0, 0));
+                break;
+            }
+            let split_info: Vec<&str> = info.split(",").collect();
+            let t_sv_id: String = split_info[0].to_string();
+            let bp: usize = split_info[1].parse::<usize>().unwrap();
+            let n_read: usize = split_info[2].parse::<usize>().unwrap();
+            bp2_info.push((t_sv_id, bp, n_read));
+        }
+        //let mut identical: String = String::new();
 
-        for (i, sv_id) in key.iter().enumerate() {
+        for sv_id in &key {
             identical_list.push(sv_id.to_string());
-            if i == 0 {
-                identical = identical + sv_id;
-            } else {
-                identical = identical + "," + sv_id;
+        }
+
+        let mut c_sv_id: String = String::new();
+        let mut max_n_read = 0;
+        for info_1 in &bp1_info {
+            if info_1.0 == "-" {
+                continue;
+            }
+            for info_2 in &bp2_info {
+                if info_1.0 == info_2.0 {
+                    if c_sv_id.is_empty() {
+                        c_sv_id = info_1.0.to_string(); 
+                        max_n_read = info_1.2 + info_2.2;
+                    } else {
+                        if info_1.2 + info_2.2 > max_n_read {
+                            c_sv_id = info_1.0.to_string();
+                            max_n_read = info_1.2 + info_2.2;
+                        }
+                    }
+                } else {
+                    continue;
+                }
             }
         }
 
-        if bp1_cat.starts_with("haplotype") && bp2_cat.starts_with("haplotype") {
-            let bp1_sv_id = bp1_info[0].to_string();
-            let bp1_bp_num = bp1_info[1].parse::<usize>().unwrap();
-            let bp2_sv_id = bp2_info[0].to_string();
-            let bp2_bp_num = bp2_info[1].parse::<usize>().unwrap();
-
-            let bp1_info = match nanomonsv_db.get(&bp1_sv_id) {
-                Some(value) => value.clone(),
-                None => {
-                    panic!("Error while reading nanomonsv result file");
-                }
-            };
-            let bp2_info = match nanomonsv_db.get(&bp2_sv_id) {
-                Some(value) => value.clone(),
-                None => {
-                    panic!("Error while reading nanomonsv result file");
-                }
-            };
-
-            if bp1_bp_num == 1 && bp2_bp_num == 1 {
-                let new_sv_info = NanomonsvInfo::new(
-                    bp1_info.bp1_contig.clone(),
-                    bp1_info.bp1_pos,
-                    bp1_info.bp1_strand.clone(),
-                    bp2_info.bp1_contig.clone(),
-                    bp2_info.bp1_pos,
-                    bp2_info.bp1_strand.clone(),
-                    bp1_info.insert_seq.clone(),
-                    bp1_info.sv_id.clone() + "_id",
-                    bp1_info.total_read,
-                    bp1_info.support_read,
-                    bp1_info.control_total_read,
-                    bp1_info.control_support_read,
-                    "PASS".to_string(),
-                    identical.clone(),
-                    bp1_read_sum,
-                    bp1_cat.clone(),
-                    bp2_cat.clone(),
-                );
-                new_nanomonsv_result.push(new_sv_info);
-            } else if bp1_bp_num == 1 && bp2_bp_num == 2 {
-                let new_sv_info = NanomonsvInfo::new(
-                    bp1_info.bp1_contig.clone(),
-                    bp1_info.bp1_pos,
-                    bp1_info.bp1_strand.clone(),
-                    bp2_info.bp2_contig.clone(),
-                    bp2_info.bp2_pos,
-                    bp2_info.bp2_strand.clone(),
-                    bp1_info.insert_seq.clone(),
-                    bp1_info.sv_id.clone() + "_id",
-                    bp1_info.total_read,
-                    bp1_info.support_read,
-                    bp1_info.control_total_read,
-                    bp1_info.control_support_read,
-                    "PASS".to_string(),
-                    identical.clone(),
-                    bp1_read_sum,
-                    bp1_cat.clone(),
-                    bp2_cat.clone(),
-                );
-                new_nanomonsv_result.push(new_sv_info);
-            } else if bp1_bp_num == 2 && bp2_bp_num == 1 {
-                let new_sv_info = NanomonsvInfo::new(
-                    bp1_info.bp2_contig.clone(),
-                    bp1_info.bp2_pos,
-                    bp1_info.bp2_strand.clone(),
-                    bp2_info.bp1_contig.clone(),
-                    bp2_info.bp1_pos,
-                    bp2_info.bp1_strand.clone(),
-                    bp1_info.insert_seq.clone(),
-                    bp1_info.sv_id.clone() + "_id",
-                    bp1_info.total_read,
-                    bp1_info.support_read,
-                    bp1_info.control_total_read,
-                    bp1_info.control_support_read,
-                    "PASS".to_string(),
-                    identical.clone(),
-                    bp1_read_sum,
-                    bp1_cat.clone(),
-                    bp2_cat.clone(),
-                );
-                new_nanomonsv_result.push(new_sv_info);
-            } else {
-                let new_sv_info = NanomonsvInfo::new(
-                    bp1_info.bp2_contig.clone(),
-                    bp1_info.bp2_pos,
-                    bp1_info.bp2_strand.clone(),
-                    bp2_info.bp2_contig.clone(),
-                    bp2_info.bp2_pos,
-                    bp2_info.bp2_strand.clone(),
-                    bp1_info.insert_seq.clone(),
-                    bp1_info.sv_id.clone() + "_id",
-                    bp1_info.total_read,
-                    bp1_info.support_read,
-                    bp1_info.control_total_read,
-                    bp1_info.control_support_read,
-                    "PASS".to_string(),
-                    identical.clone(),
-                    bp1_read_sum,
-                    bp1_cat.clone(),
-                    bp2_cat.clone(),
-                );
-                new_nanomonsv_result.push(new_sv_info);
+        if c_sv_id.is_empty() {
+            for info in &bp1_info {
+                if info.2 > max_n_read {
+                    c_sv_id = info.0.to_string();
+                    max_n_read = info.2;
+                } 
             }
-        } else if bp1_cat.starts_with("haplotype") {
-            let bp1_sv_id = bp1_info[0].to_string();
-            let bp1_bp_num = bp1_info[1].parse::<usize>().unwrap();
 
-            let sv_info = match nanomonsv_db.get(&bp1_sv_id) {
+            for info in &bp2_info {
+                if info.2 > max_n_read {
+                    c_sv_id = info.0.to_string();
+                    max_n_read = info.2;
+                }
+            }
+        }
+
+        if !c_sv_id.is_empty() {
+            let sv_info = match nanomonsv_db.get(&c_sv_id) {
                 Some(value) => value.clone(),
                 None => {
-                    panic!("Error while reading nanomonsv result file");
+                    panic!("Error while reading nanomonsv result file: {}", c_sv_id);
                 }
             };
-
-            let new_sv_info = if bp1_bp_num == 1 {
-                NanomonsvInfo::new(
-                    sv_info.bp1_contig.clone(),
-                    sv_info.bp1_pos,
-                    sv_info.bp1_strand.clone(),
-                    sv_info.bp2_contig.clone(),
-                    sv_info.bp2_pos,
-                    sv_info.bp2_strand.clone(),
-                    sv_info.insert_seq.clone(),
-                    sv_info.sv_id.clone() + "_id",
-                    sv_info.total_read,
-                    sv_info.support_read,
-                    sv_info.control_total_read,
-                    sv_info.control_support_read,
-                    "PASS".to_string(),
-                    identical.clone(),
-                    bp1_read_sum,
-                    bp1_cat.clone(),
-                    bp2_cat.clone(),
-                )
-            } else {
-                NanomonsvInfo::new(
-                    sv_info.bp1_contig.clone(),
-                    sv_info.bp1_pos,
-                    sv_info.bp1_strand.clone(),
-                    sv_info.bp2_contig.clone(),
-                    sv_info.bp2_pos,
-                    sv_info.bp2_strand.clone(),
-                    sv_info.insert_seq.clone(),
-                    sv_info.sv_id.clone() + "_id",
-                    sv_info.total_read,
-                    sv_info.support_read,
-                    sv_info.control_total_read,
-                    sv_info.control_support_read,
-                    "PASS".to_string(),
-                    identical.clone(),
-                    bp1_read_sum,
-                    bp2_cat.clone(),
-                    bp1_cat.clone(),
-                )
-            };
-
-            new_nanomonsv_result.push(new_sv_info);
-        } else if bp2_cat.starts_with("haplotype") {
-            let bp2_sv_id = bp2_info[0].to_string();
-            let bp2_bp_num = bp2_info[1].parse::<usize>().unwrap();
-
-            let sv_info = match nanomonsv_db.get(&bp2_sv_id) {
-                Some(value) => value.clone(),
-                None => {
-                    panic!("Error while reading nanomonsv result file");
-                }
-            };
-
-            let new_sv_info = if bp2_bp_num == 1 {
-                NanomonsvInfo::new(
-                    sv_info.bp1_contig.clone(),
-                    sv_info.bp1_pos,
-                    sv_info.bp1_strand.clone(),
-                    sv_info.bp2_contig.clone(),
-                    sv_info.bp2_pos,
-                    sv_info.bp2_strand.clone(),
-                    sv_info.insert_seq.clone(),
-                    sv_info.sv_id.clone() + "_id",
-                    sv_info.total_read,
-                    sv_info.support_read,
-                    sv_info.control_total_read,
-                    sv_info.control_support_read,
-                    "PASS".to_string(),
-                    identical.clone(),
-                    bp2_read_sum,
-                    bp2_cat.clone(),
-                    bp1_cat.clone(),
-                )
-            } else {
-                NanomonsvInfo::new(
-                    sv_info.bp1_contig.clone(),
-                    sv_info.bp1_pos,
-                    sv_info.bp1_strand.clone(),
-                    sv_info.bp2_contig.clone(),
-                    sv_info.bp2_pos,
-                    sv_info.bp2_strand.clone(),
-                    sv_info.insert_seq.clone(),
-                    sv_info.sv_id.clone() + "_id",
-                    sv_info.total_read,
-                    sv_info.support_read,
-                    sv_info.control_total_read,
-                    sv_info.control_support_read,
-                    "PASS".to_string(),
-                    identical.clone(),
-                    bp2_read_sum,
-                    bp1_cat.clone(),
-                    bp2_cat.clone(),
-                )
-            };
-
+            let new_sv_info = NanomonsvInfo::new(
+                sv_info.bp1_contig.clone(),
+                sv_info.bp1_pos,
+                sv_info.bp1_strand.clone(),
+                sv_info.bp2_contig.clone(),
+                sv_info.bp2_pos,
+                sv_info.bp2_strand.clone(),
+                sv_info.insert_seq.clone(),
+                sv_info.sv_id.clone(),
+                sv_info.total_read,
+                sv_info.support_read,
+                sv_info.control_total_read,
+                sv_info.control_support_read,
+                "PASS".to_string(),
+                key.join(","),
+                bp1_read_sum,
+                bp1_cat.clone(),
+                bp2_cat.clone(),
+            );
             new_nanomonsv_result.push(new_sv_info);
         } else {
             let mut max_sv_id = String::new();
-            let mut n_read = 0;
+            let mut s_read = 0;
             for sv_id in key.iter() {
                 let info = match nanomonsv_db.get(sv_id) {
                     Some(value) => value.clone(),
@@ -387,9 +260,9 @@ pub fn run(
                     }
                 };
 
-                if info.support_read > n_read {
+                if info.support_read > s_read {
                     max_sv_id = sv_id.to_string();
-                    n_read = info.support_read;
+                    s_read = info.support_read;
                 }
             }
 
@@ -407,13 +280,13 @@ pub fn run(
                 sv_info.bp2_pos,
                 sv_info.bp2_strand.clone(),
                 sv_info.insert_seq.clone(),
-                sv_info.sv_id.clone() + "_id",
+                sv_info.sv_id.clone()/,
                 sv_info.total_read,
                 sv_info.support_read,
                 sv_info.control_total_read,
                 sv_info.control_support_read,
                 "PASS".to_string(),
-                identical.clone(),
+                key.join(","),
                 bp1_read_sum,
                 bp1_cat.clone(),
                 bp2_cat.clone(),
@@ -625,54 +498,28 @@ pub fn run(
 
     // write new nanomonsv results
     println!("Chr_1\tPos_1\tDir_1\tChr_2\tPos_2\tDir_2\tInserted_Seq\tSV_ID\tChecked_Read_Num_Tumor\tSupporting_Read_Num_Tumor\tChecked_Read_Num_Control\tSupporting_Read_Num_Control\tIs_Filter\tIdentical_SVs\tSupporting_Read_Num_Total\tHaplotype_bp1\tHaplotype_bp2");
-    for result in new_nanomonsv_result.iter() {
-        if result.bp1_contig > result.bp2_contig
-            || (result.bp1_contig == result.bp2_contig && result.bp1_pos > result.bp2_pos)
-        {
-            println!(
-                "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
-                result.bp2_contig,
-                result.bp2_pos,
-                result.bp2_strand,
-                result.bp1_contig,
-                result.bp1_pos,
-                result.bp1_strand,
-                result.insert_seq,
-                result.sv_id,
-                result.total_read,
-                result.support_read,
-                result.control_total_read,
-                result.control_support_read,
-                result.is_filter,
-                result.identical,
-                result.total_support_read,
-                result.bp2_haplotype,
-                result.bp1_haplotype,
-            );
-        } else {
-            println!(
-                "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
-                result.bp1_contig,
-                result.bp1_pos,
-                result.bp1_strand,
-                result.bp2_contig,
-                result.bp2_pos,
-                result.bp2_strand,
-                result.insert_seq,
-                result.sv_id,
-                result.total_read,
-                result.support_read,
-                result.control_total_read,
-                result.control_support_read,
-                result.is_filter,
-                result.identical,
-                result.total_support_read,
-                result.bp1_haplotype,
-                result.bp2_haplotype,
-            );
-        }
+    for sv_info in new_nanomonsv_result.iter() {       
+        println!(
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            sv_info.bp1_contig,
+            sv_info.bp1_pos,
+            sv_info.bp1_strand,
+            sv_info.bp2_contig,
+            sv_info.bp2_pos,
+            sv_info.bp2_strand,
+            sv_info.insert_seq,
+            sv_info.sv_id,
+            sv_info.total_read,
+            sv_info.support_read,
+            sv_info.control_total_read,
+            sv_info.control_support_read,
+            sv_info.is_filter,
+            sv_info.identical,
+            sv_info.total_support_read,
+            sv_info.bp1_haplotype,
+            sv_info.bp2_haplotype,
+        );
     }
-
     eprintln!("Recording new SV results finished.");
     Ok(())
 }
