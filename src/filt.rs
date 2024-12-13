@@ -207,17 +207,96 @@ pub fn run(
         }
 
         if c_sv_id.is_empty() {
-            for info in &bp1_info {
-                if info.2 > max_n_read {
-                    c_sv_id = info.0.to_string();
-                    max_n_read = info.2;
-                } 
-            }
+            if bp1_info[0].0 != "-" && bp2_info[0].0 != "-" {
+                let mut t_sv_id_bp1: String = String::new();
+                let mut bp_id_bp1: usize = 0;
+                for info in &bp1_info {
+                    if info.2 > 0 {
+                        t_sv_id_bp1 = info.0.to_string();
+                        bp_id_bp1 = info.1;
+                    }
+                }
+                let mut t_sv_id_bp2: String = String::new();
+                let mut bp_id_bp2: usize = 0;
+                for info in &bp2_info {
+                    if info.2 > 0 {
+                        t_sv_id_bp2 = info.0.to_string();
+                        bp_id_bp2 = info.1;
+                    }
+                }
 
-            for info in &bp2_info {
-                if info.2 > max_n_read {
-                    c_sv_id = info.0.to_string();
-                    max_n_read = info.2;
+                let sv_info_bp1 = match nanomonsv_db.get(&t_sv_id_bp1) {
+                    Some(value) => value.clone(),
+                    None => {
+                        panic!("Error while reading nanomonsv result file: {}", c_sv_id);
+                    }
+                };
+
+                let sv_info_bp2 = match nanomonsv_db.get(&t_sv_id_bp2) {
+                    Some(value) => value.clone(),
+                    None => {
+                        panic!("Error while reading nanomonsv result file: {}", c_sv_id);
+                    }
+                };
+                
+                if bp_id_bp1 == 1 {
+                    if bp_id_bp2 == 1 {
+                        if sv_info_bp1.bp2_contig == sv_info_bp2.bp1_contig && (sv_info_bp1.bp2_pos as isize - sv_info_bp2.bp1_pos as isize).abs() < 50 {
+                            c_sv_id = t_sv_id_bp1.clone();
+                            // max_n_read = max_n_read_bp1;
+                        } 
+
+                        if sv_info_bp1.bp1_contig == sv_info_bp2.bp2_contig && (sv_info_bp1.bp1_pos as isize - sv_info_bp2.bp2_pos as isize).abs() < 50 {
+                            c_sv_id = t_sv_id_bp2.clone();
+                            // max_n_read = max_n_read_bp2;
+                        } 
+                    } else {
+                        if sv_info_bp1.bp2_contig == sv_info_bp2.bp2_contig && (sv_info_bp1.bp2_pos as isize - sv_info_bp2.bp2_pos as isize).abs() < 50 {
+                            c_sv_id = t_sv_id_bp1.clone();
+                            // max_n_read = max_n_read_bp1;
+                        } 
+
+                        if sv_info_bp1.bp1_contig == sv_info_bp2.bp1_contig && (sv_info_bp1.bp1_pos as isize - sv_info_bp2.bp1_pos as isize).abs() < 50 {
+                            c_sv_id = t_sv_id_bp2.clone();
+                            // max_n_read = max_n_read_bp2;
+                        } 
+                    }
+                } else {
+                    if bp_id_bp2 == 1 {
+                        if sv_info_bp1.bp1_contig == sv_info_bp2.bp1_contig && (sv_info_bp1.bp1_pos as isize - sv_info_bp2.bp1_pos as isize).abs() < 50 {
+                            c_sv_id = t_sv_id_bp1.clone();
+                            // max_n_read = max_n_read_bp1;
+                        } 
+
+                        if sv_info_bp1.bp2_contig == sv_info_bp2.bp2_contig && (sv_info_bp1.bp2_pos as isize - sv_info_bp2.bp2_pos as isize).abs() < 50 {
+                            c_sv_id = t_sv_id_bp2.clone();
+                            // max_n_read = max_n_read_bp2;
+                        } 
+                    } else {
+                        if sv_info_bp1.bp1_contig == sv_info_bp2.bp2_contig && (sv_info_bp1.bp1_pos as isize - sv_info_bp2.bp2_pos as isize).abs() < 50 {
+                            c_sv_id = t_sv_id_bp1.clone();
+                            // max_n_read = max_n_read_bp1;
+                        } 
+
+                        if sv_info_bp1.bp2_contig == sv_info_bp2.bp1_contig && (sv_info_bp1.bp2_pos as isize - sv_info_bp2.bp1_pos as isize).abs() < 50 {
+                            c_sv_id = t_sv_id_bp2.clone();
+                           // max_n_read = max_n_read_bp2;
+                        } 
+                    }
+                }
+            } else {
+                for info in &bp1_info {
+                    if info.2 > max_n_read {
+                        c_sv_id = info.0.to_string();
+                        max_n_read = info.2;
+                    } 
+                }
+
+                for info in &bp2_info {
+                    if info.2 > max_n_read {
+                        c_sv_id = info.0.to_string();
+                        max_n_read = info.2;
+                    }
                 }
             }
         }
@@ -280,7 +359,7 @@ pub fn run(
                 sv_info.bp2_pos,
                 sv_info.bp2_strand.clone(),
                 sv_info.insert_seq.clone(),
-                sv_info.sv_id.clone()/,
+                sv_info.sv_id.clone(),
                 sv_info.total_read,
                 sv_info.support_read,
                 sv_info.control_total_read,
