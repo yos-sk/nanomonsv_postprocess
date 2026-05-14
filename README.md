@@ -1,6 +1,4 @@
 # Nanomonsv_postprocess
-[Nanomonsv](https://github.com/friend1ws/nanomonsv.git) postprocess filtering and haplotyping.
-
 This tool removes redundant SV calls that arise when running nanomonsv with a diploid genome assembly, by realigning supporting reads around breakpoints and grouping calls that represent the same event on the two haplotypes.
 
 It is primarily intended to run inside [PRCGAP](https://github.com/yos-sk/PRCGAP), where it is invoked as one step of the SV calling pipeline.
