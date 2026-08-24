@@ -39,6 +39,20 @@ enum Commands {
 
         #[arg(short = 'l', long, default_value = "180")]
         min_length: String,
+
+        /// Contig names of haplotype 1 (bam_refiner output). Without both
+        /// lists the haplotype-combination constraint on grouping is skipped.
+        #[arg(long, default_value = "")]
+        hap1_list: String,
+
+        /// Contig names of haplotype 2.
+        #[arg(long, default_value = "")]
+        hap2_list: String,
+
+        /// When two calls share a haplotype on one side, how far apart that
+        /// breakpoint may be before they are treated as separate loci.
+        #[arg(long, default_value = "100")]
+        max_position_diff: String,
     },
 
     Filt {
@@ -92,15 +106,22 @@ fn main() {
             bam_file,
             min_identity,
             min_length,
+            hap1_list,
+            hap2_list,
+            max_position_diff,
         } => {
             let min_identity: f64 = min_identity.parse().unwrap_or(99.0);
             let min_length: usize = min_length.parse().unwrap_or(180);
+            let max_position_diff: usize = max_position_diff.parse().unwrap_or(100);
             if let Err(error) = realignment::run(
                 input_bed,
                 support_read_file,
                 bam_file,
                 min_identity,
                 min_length,
+                hap1_list,
+                hap2_list,
+                max_position_diff,
             ) {
                 eprintln!("{}", error);
                 process::exit(1);
