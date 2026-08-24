@@ -1,4 +1,6 @@
 use rust_htslib::bam::{Header, IndexedReader, Read};
+use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::error::Error;
@@ -48,16 +50,19 @@ impl SVInfo {
     }
 }
 
+/// Which breakpoint of which SV is the same physical junction as this pair's.
+/// `BTreeSet` rather than `HashSet`: these sets are iterated when the record is
+/// printed, and a randomised hash order would make the output irreproducible.
 #[derive(Eq, PartialEq, Clone)]
 struct IdenticalInfo {
-    identical_bp1: HashSet<(String, usize)>,
-    identical_bp2: HashSet<(String, usize)>,
+    identical_bp1: BTreeSet<(String, usize)>,
+    identical_bp2: BTreeSet<(String, usize)>,
 }
 impl IdenticalInfo {
     fn new() -> Self {
         IdenticalInfo {
-            identical_bp1: HashSet::new(),
-            identical_bp2: HashSet::new(),
+            identical_bp1: BTreeSet::new(),
+            identical_bp2: BTreeSet::new(),
         }
     }
 
@@ -70,13 +75,47 @@ impl IdenticalInfo {
     }
 }
 
+/// Which haplotype a breakpoint sits on, for the two breakpoints of one call,
+/// read in the orientation the group assigned to that call.
+type Combo = (u8, u8);
+
+/// contig -> 1 or 2, from the bam_refiner haplotype contig lists.
+fn load_contig_haplotype(
+    hap1_list: &str,
+    hap2_list: &str,
+) -> Result<HashMap<String, u8>, Box<dyn Error>> {
+    let mut db: HashMap<String, u8> = HashMap::new();
+    for (path, hap) in [(hap1_list, 1u8), (hap2_list, 2u8)] {
+        let reader = open_file(path).expect(&format!("Could not open {}", path));
+        for line in reader.lines() {
+            let line = line?;
+            if let Some(contig) = line.split_whitespace().next() {
+                db.insert(contig.to_string(), hap);
+            }
+        }
+    }
+    Ok(db)
+}
+
 pub fn run(
     input_bed: &str,
     support_read_file: &str,
     bam_file: &str,
     min_identity: f64,
     min_length: usize,
+    hap1_list: &str,
+    hap2_list: &str,
+    max_position_diff: usize,
 ) -> Result<(), Box<dyn Error>> {
+    let contig_hap: HashMap<String, u8> = if hap1_list.is_empty() || hap2_list.is_empty() {
+        eprintln!(
+            "Warning: no haplotype contig lists given; calls will be grouped without \
+             the haplotype-combination constraint"
+        );
+        HashMap::new()
+    } else {
+        load_contig_haplotype(hap1_list, hap2_list)?
+    };
     // open bed file including SV breakpoint information with ±100 bp sequence
     let bp_reader = open_file(input_bed).expect(&format!("Could not open file {}", input_bed));
     let mut bp_info_db: HashSet<SVInfo> = HashSet::new();
@@ -110,13 +149,21 @@ pub fn run(
         }
     }
 
-    // grouping identical SVs by smith-waterman algorithm
-    //let threshold = 99.0;
-    let mut identical_pairs: Vec<(String, String, usize)> = Vec::new();
-    // realignment of 2 * 2 breakpoint combination
-    for sv_info_1 in &bp_info_db {
+    // Compare every SV against every other one and keep, for each candidate
+    // pair, how well its two breakpoints realign. Iteration goes over a sorted
+    // vector rather than the HashSet directly: the set of pairs would be the
+    // same either way, but the order decides ties later on, and a randomised
+    // hash order would make the run irreproducible.
+    let mut sv_infos: Vec<&SVInfo> = bp_info_db.iter().collect();
+    sv_infos.sort_by(|a, b| a.sv_id.cmp(&b.sv_id));
+    let sv_by_id: HashMap<&str, &SVInfo> =
+        sv_infos.iter().map(|s| (s.sv_id.as_str(), *s)).collect();
+
+    // (sv_id_1, sv_id_2, pattern, identity)
+    let mut identical_pairs: Vec<(String, String, usize, f64)> = Vec::new();
+    for sv_info_1 in &sv_infos {
         let sv_type1 = &sv_info_1.sv_id[0..1];
-        for sv_info_2 in &bp_info_db {
+        for sv_info_2 in &sv_infos {
             if sv_info_1.sv_id >= sv_info_2.sv_id {
                 continue;
             }
@@ -126,150 +173,110 @@ pub fn run(
                 continue;
             }
             // smith_waterman algorithm
-            let result1 = match smith_waterman::run(
+            let result1 = smith_waterman::run(
                 &sv_info_1.bp1_seq,
                 &sv_info_2.bp1_seq,
                 min_identity,
                 min_length,
-            ) {
-                Ok(flag) => flag,
-                _ => false,
-            };
-            let result2 = match smith_waterman::run(
+            )
+            .unwrap_or(None);
+            let result2 = smith_waterman::run(
                 &sv_info_1.bp1_seq,
                 &sv_info_2.bp2_seq,
                 min_identity,
                 min_length,
-            ) {
-                Ok(flag) => flag,
-                _ => false,
+            )
+            .unwrap_or(None);
+
+            // A pair is scored by its weaker breakpoint: both junctions have to
+            // look the same for the two calls to be the same event, so the
+            // lower of the two identities is what should be ranked.
+            let (pattern, first, second) = if result1.is_some() && result2.is_none() {
+                (
+                    0,
+                    result1,
+                    smith_waterman::run(
+                        &sv_info_1.bp2_seq,
+                        &sv_info_2.bp2_seq,
+                        min_identity,
+                        min_length,
+                    )
+                    .unwrap_or(None),
+                )
+            } else {
+                (
+                    1,
+                    result2,
+                    smith_waterman::run(
+                        &sv_info_1.bp2_seq,
+                        &sv_info_2.bp1_seq,
+                        min_identity,
+                        min_length,
+                    )
+                    .unwrap_or(None),
+                )
             };
 
-            if result1 && !result2 {
-                let pattern = 0;
-                let result = match smith_waterman::run(
-                    &sv_info_1.bp2_seq,
-                    &sv_info_2.bp2_seq,
-                    min_identity,
-                    min_length,
-                ) {
-                    Ok(flag) => flag,
-                    _ => false,
-                };
-                if result {
-                    eprintln!("{}\t{}\t{}", sv_info_1.sv_id, sv_info_2.sv_id, pattern);
-                    // update breakpoint information
-                    identical_pairs.push((
-                        sv_info_1.sv_id.clone(),
-                        sv_info_2.sv_id.clone(),
-                        pattern,
-                    ));
+            let Some(second_identity) = second else {
+                continue;
+            };
+
+            // Two calls are the same event seen once per haplotype, so they must
+            // sit on different haplotype combinations. Same-combination calls --
+            // (1,1) with (1,1), say -- are separate loci such as repeat copies,
+            // and collapsing them is what over-filtered the centromeres.
+            if !contig_hap.is_empty() {
+                let combo_1 = oriented_combo(sv_info_1, &contig_hap, false);
+                let combo_2 = oriented_combo(sv_info_2, &contig_hap, pattern == 1);
+                match (combo_1, combo_2) {
+                    (Some(c1), Some(c2)) if c1 != c2 => (),
+                    // Unknown contig: too little information to declare the
+                    // calls redundant, so leave them alone.
+                    _ => continue,
                 }
-            } else {
-                let pattern = 1;
-                let result = match smith_waterman::run(
-                    &sv_info_1.bp2_seq,
-                    &sv_info_2.bp1_seq,
-                    min_identity,
-                    min_length,
+                // Sharing a haplotype on one side means sharing that breakpoint.
+                if !shared_haplotype_sides_agree(
+                    sv_info_1,
+                    sv_info_2,
+                    pattern == 1,
+                    &contig_hap,
+                    max_position_diff,
                 ) {
-                    Ok(flag) => flag,
-                    _ => false,
-                };
-                if result {
-                    eprintln!("{}\t{}\t{}", sv_info_1.sv_id, sv_info_2.sv_id, pattern);
-                    // update breakpoint information
-                    identical_pairs.push((
-                        sv_info_1.sv_id.clone(),
-                        sv_info_2.sv_id.clone(),
-                        pattern,
-                    ));
+                    continue;
                 }
             }
+
+            let identity = match first {
+                Some(first_identity) => first_identity.min(second_identity),
+                None => second_identity,
+            };
+            eprintln!(
+                "{}\t{}\t{}\t{:.3}",
+                sv_info_1.sv_id, sv_info_2.sv_id, pattern, identity
+            );
+            identical_pairs.push((
+                sv_info_1.sv_id.clone(),
+                sv_info_2.sv_id.clone(),
+                pattern,
+                identity,
+            ));
         }
     }
 
-    // grouping
-    let mut groups: Vec<Vec<(String, String, usize)>> = Vec::new();
-    //let mut cnt = 0;
-    for pair in identical_pairs {
-        //cnt += 1;
-        //let mut found = false;
-        //eprintln!("{}, {:?}", cnt, groups);
-        let mut t_groups: Vec<Vec<(String, String, usize)>> = Vec::new();
-        let mut t_group: Vec<(String, String, usize)> = vec![pair.clone()];
-        for group in groups.iter() {
-            if group
-                .iter()
-                .any(|x| x.0 == pair.0 || x.1 == pair.0 || x.0 == pair.1 || x.1 == pair.1)
-            {
-                for t_pair in group.iter() {
-                    t_group.push(t_pair.clone());
-                }
+    let groups = build_groups(&identical_pairs, &sv_by_id, &contig_hap);
 
-                //group.push(pair.clone());
-                //found = true;
-                //break;
-            } else {
-                t_groups.push(group.to_vec());
-            }
-        }
-        /*if !found {
-            groups.push(vec![pair.clone()]);
-        }*/
-        t_groups.push(t_group);
-        groups = t_groups.clone();
-    }
-
-    let mut group_db: HashMap<Vec<String>, IdenticalInfo> = HashMap::new();
-
-    for pairs in groups.iter_mut() {
+    let mut group_db: BTreeMap<Vec<String>, IdenticalInfo> = BTreeMap::new();
+    for members in groups {
         let mut info = IdenticalInfo::new();
-        let mut group_db_key: Vec<String> = Vec::new();
-        pairs.sort_by_key(|pair| pair.0.clone());
-        // eprintln!("{:?}", pairs);
-        for pair in pairs {
-            match pair.2 {
-                0 => {
-                    if info.identical_bp2.contains(&(pair.0.clone(), 1))
-                        || info.identical_bp2.contains(&(pair.1.clone(), 1))
-                    {
-                        info.add_identical_bp1(pair.0.clone(), 2);
-                        info.add_identical_bp2(pair.0.clone(), 1);
-                        info.add_identical_bp1(pair.1.clone(), 2);
-                        info.add_identical_bp2(pair.1.clone(), 1);
-                    } else {
-                        info.add_identical_bp1(pair.0.clone(), 1);
-                        info.add_identical_bp2(pair.0.clone(), 2);
-                        info.add_identical_bp1(pair.1.clone(), 1);
-                        info.add_identical_bp2(pair.1.clone(), 2);
-                    }
-                }
-                1 => {
-                    if info.identical_bp2.contains(&(pair.0.clone(), 1))
-                        || info.identical_bp2.contains(&(pair.1.clone(), 2))
-                    {
-                        info.add_identical_bp1(pair.0.clone(), 2);
-                        info.add_identical_bp2(pair.0.clone(), 1);
-                        info.add_identical_bp1(pair.1.clone(), 1);
-                        info.add_identical_bp2(pair.1.clone(), 2);
-                    } else {
-                        info.add_identical_bp1(pair.0.clone(), 1);
-                        info.add_identical_bp2(pair.0.clone(), 2);
-                        info.add_identical_bp1(pair.1.clone(), 2);
-                        info.add_identical_bp2(pair.1.clone(), 1);
-                    }
-                }
-                _ => (),
-            }
-            if !group_db_key.contains(&pair.0) {
-                group_db_key.push(pair.0.clone());
-            }
-            if !group_db_key.contains(&pair.1) {
-                group_db_key.push(pair.1.clone());
-            }
+        let mut key: Vec<String> = Vec::new();
+        for (sv_id, swapped) in &members {
+            // A swapped call contributes its bp2 to side 1 and its bp1 to side 2.
+            let (side1_bp, side2_bp) = if *swapped { (2, 1) } else { (1, 2) };
+            info.add_identical_bp1(sv_id.clone(), side1_bp);
+            info.add_identical_bp2(sv_id.clone(), side2_bp);
+            key.push(sv_id.clone());
         }
-        group_db.insert(group_db_key.clone(), info.clone());
+        group_db.insert(key, info);
     }
 
     let _ = classify_haplotype_fetch_bam(&group_db, &bp_info_db, support_read_file, bam_file);
@@ -277,7 +284,7 @@ pub fn run(
 }
 
 fn classify_haplotype_fetch_bam(
-    group_db: &HashMap<Vec<String>, IdenticalInfo>,
+    group_db: &BTreeMap<Vec<String>, IdenticalInfo>,
     bp_info_db: &HashSet<SVInfo>,
     support_read_file: &str,
     bam_file: &str,
@@ -669,4 +676,387 @@ fn classify_haplotype_fetch_bam(
     eprintln!("Unassigned: {}", unassigned);
     eprintln!("Ambiguous: {}", ambiguous);
     Ok(())
+}
+
+/// The two breakpoints of a call, read in the given orientation.
+fn oriented_breakpoints(sv: &SVInfo, swapped: bool) -> [(&str, usize); 2] {
+    if swapped {
+        [
+            (sv.bp2_contig.as_str(), sv.bp2_pos),
+            (sv.bp1_contig.as_str(), sv.bp1_pos),
+        ]
+    } else {
+        [
+            (sv.bp1_contig.as_str(), sv.bp1_pos),
+            (sv.bp2_contig.as_str(), sv.bp2_pos),
+        ]
+    }
+}
+
+/// Whether the sides on which two calls share a haplotype point at the same locus.
+///
+/// If the calls really are one event seen once per haplotype, then wherever they
+/// land on the *same* haplotype they must be the same breakpoint: same contig,
+/// same position. On BL2009 HiFi 42 of 46 such sides sat within 100 bp of each
+/// other (median 0 bp); the handful that did not were on a different contig
+/// altogether or megabases away, i.e. separate loci that merely share sequence.
+/// The opposite-haplotype side is not checked — different contig and a different
+/// coordinate system are expected there.
+fn shared_haplotype_sides_agree(
+    sv1: &SVInfo,
+    sv2: &SVInfo,
+    swapped2: bool,
+    hap: &HashMap<String, u8>,
+    max_position_diff: usize,
+) -> bool {
+    let side_1 = oriented_breakpoints(sv1, false);
+    let side_2 = oriented_breakpoints(sv2, swapped2);
+
+    for side in 0..2 {
+        let (contig_1, pos_1) = side_1[side];
+        let (contig_2, pos_2) = side_2[side];
+        let (hap_1, hap_2) = (hap.get(contig_1), hap.get(contig_2));
+        // An unplaced contig leaves too little information to call the two
+        // redundant, so refuse rather than guess.
+        let (Some(hap_1), Some(hap_2)) = (hap_1, hap_2) else {
+            return false;
+        };
+        if hap_1 != hap_2 {
+            continue;
+        }
+        if contig_1 != contig_2 || pos_1.abs_diff(pos_2) > max_position_diff {
+            return false;
+        }
+    }
+    true
+}
+
+/// The haplotype combination of a call, read in the given orientation.
+fn oriented_combo(sv: &SVInfo, hap: &HashMap<String, u8>, swapped: bool) -> Option<Combo> {
+    let h1 = *hap.get(&sv.bp1_contig)?;
+    let h2 = *hap.get(&sv.bp2_contig)?;
+    Some(if swapped { (h2, h1) } else { (h1, h2) })
+}
+
+/// Group the calls that realignment says are the same event, highest identity
+/// first, ties broken by SV id.
+///
+/// One somatic junction is called once per haplotype *per breakpoint*, so up to
+/// four calls describe it: (1,1), (1,2), (2,1) and (2,2). A group therefore has
+/// four slots and each holds at most one call — the first claimant, which by the
+/// processing order is the one with the highest realignment identity.
+///
+/// The previous implementation instead merged every pair that shared a call into
+/// one transitive group. In a centromere or another high-identity repeat the
+/// breakpoint sequences all look alike, so a single group swallowed whole
+/// families of calls and `filt` then kept only one of them. Two guards stop that
+/// here: a call can only join a group if it realigns against *every* member
+/// (no chaining through an intermediate), and only if its haplotype slot is
+/// still free (repeat copies share a slot, so they cannot collapse).
+///
+/// `swapped` records the orientation a call was given inside its group: a
+/// swapped call's bp2 is the junction side that the others call bp1.
+fn build_groups(
+    candidates: &[(String, String, usize, f64)],
+    sv_by_id: &HashMap<&str, &SVInfo>,
+    contig_hap: &HashMap<String, u8>,
+) -> Vec<Vec<(String, bool)>> {
+    let mut edges: Vec<&(String, String, usize, f64)> = candidates.iter().collect();
+    edges.sort_by(|a, b| {
+        b.3.partial_cmp(&a.3)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then(a.0.cmp(&b.0))
+            .then(a.1.cmp(&b.1))
+    });
+
+    let pattern_of: HashMap<(&str, &str), usize> = candidates
+        .iter()
+        .map(|(a, b, p, _)| ((a.as_str(), b.as_str()), *p))
+        .collect();
+    let pattern_between = |a: &str, b: &str| -> Option<usize> {
+        if a <= b {
+            pattern_of.get(&(a, b)).copied()
+        } else {
+            pattern_of.get(&(b, a)).copied()
+        }
+    };
+
+    // group index -> members; a call belongs to exactly one group.
+    let mut groups: Vec<Vec<(String, bool)>> = Vec::new();
+    let mut group_of: HashMap<String, usize> = HashMap::new();
+
+    for (id_a, id_b, pattern, _identity) in edges {
+        let ga = *group_of
+            .entry(id_a.clone())
+            .or_insert_with(|| {
+                groups.push(vec![(id_a.clone(), false)]);
+                groups.len() - 1
+            });
+        let gb = *group_of
+            .entry(id_b.clone())
+            .or_insert_with(|| {
+                groups.push(vec![(id_b.clone(), false)]);
+                groups.len() - 1
+            });
+        if ga == gb {
+            continue;
+        }
+
+        // Orient the second group so that this pair's correspondence holds:
+        // differing orientations mean bp1 of one matches bp2 of the other.
+        let orient_a = groups[ga]
+            .iter()
+            .find(|(id, _)| id == id_a)
+            .map(|(_, s)| *s)
+            .unwrap_or(false);
+        let orient_b = groups[gb]
+            .iter()
+            .find(|(id, _)| id == id_b)
+            .map(|(_, s)| *s)
+            .unwrap_or(false);
+        let wanted_b = orient_a ^ (*pattern == 1);
+        let flip = wanted_b ^ orient_b;
+
+        let merged_b: Vec<(String, bool)> = groups[gb]
+            .iter()
+            .map(|(id, s)| (id.clone(), s ^ flip))
+            .collect();
+
+        // Every cross pair must exist and agree with the orientations, so that
+        // a group is a clique rather than a chain.
+        let consistent = groups[ga].iter().all(|(m, om)| {
+            merged_b.iter().all(|(n, on)| {
+                pattern_between(m, n) == Some(if om == on { 0 } else { 1 })
+            })
+        });
+        if !consistent {
+            continue;
+        }
+
+        // One call per haplotype slot.
+        if !contig_hap.is_empty() {
+            let mut slots: BTreeSet<Combo> = BTreeSet::new();
+            let mut all_known = true;
+            for (id, swapped) in groups[ga].iter().chain(merged_b.iter()) {
+                match sv_by_id
+                    .get(id.as_str())
+                    .and_then(|sv| oriented_combo(sv, contig_hap, *swapped))
+                {
+                    Some(combo) => {
+                        if !slots.insert(combo) {
+                            all_known = false;
+                            break;
+                        }
+                    }
+                    None => {
+                        all_known = false;
+                        break;
+                    }
+                }
+            }
+            if !all_known {
+                continue;
+            }
+        } else if groups[ga].len() + merged_b.len() > 4 {
+            continue;
+        }
+
+        for (id, _) in merged_b.iter() {
+            group_of.insert(id.clone(), ga);
+        }
+        let mut merged = std::mem::take(&mut groups[ga]);
+        merged.extend(merged_b);
+        merged.sort();
+        groups[ga] = merged;
+        groups[gb].clear();
+    }
+
+    let mut out: Vec<Vec<(String, bool)>> =
+        groups.into_iter().filter(|g| g.len() > 1).collect();
+    out.sort();
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sv(id: &str, c1: &str, c2: &str) -> SVInfo {
+        sv_at(id, c1, 100, c2, 200)
+    }
+
+    fn sv_at(id: &str, c1: &str, p1: usize, c2: &str, p2: usize) -> SVInfo {
+        let mut info = SVInfo::new();
+        info.add_bp1_info(id.to_string(), c1.to_string(), p1, b"A");
+        info.add_bp2_info(id.to_string(), c2.to_string(), p2, b"A");
+        info
+    }
+
+    fn locus_hap() -> HashMap<String, u8> {
+        let mut hap = HashMap::new();
+        hap.insert("h1_a".to_string(), 1u8);
+        hap.insert("h1_b".to_string(), 1u8);
+        hap.insert("h2_a".to_string(), 2u8);
+        hap
+    }
+
+    #[test]
+    fn a_shared_haplotype_side_must_be_the_same_locus() {
+        let hap = locus_hap();
+        // Same hap1 breakpoint, hap2 partner differs: the real redundancy.
+        let a = sv_at("a", "h1_a", 1_000, "h1_a", 5_000);
+        let b = sv_at("b", "h1_a", 1_050, "h2_a", 5_000);
+        assert!(shared_haplotype_sides_agree(&a, &b, false, &hap, 100));
+
+        // Same haplotype but megabases apart: separate loci.
+        let far = sv_at("c", "h1_a", 3_000_000, "h2_a", 5_000);
+        assert!(!shared_haplotype_sides_agree(&a, &far, false, &hap, 100));
+
+        // Same haplotype, different contig: separate loci.
+        let other = sv_at("d", "h1_b", 1_000, "h2_a", 5_000);
+        assert!(!shared_haplotype_sides_agree(&a, &other, false, &hap, 100));
+    }
+
+    #[test]
+    fn the_opposite_haplotype_side_is_not_position_checked() {
+        let hap = locus_hap();
+        // hap1 side agrees; the hap2 partner sits at a quite different
+        // coordinate, which is normal across haplotypes.
+        let a = sv_at("a", "h1_a", 1_000, "h1_a", 5_000);
+        let b = sv_at("b", "h1_a", 1_000, "h2_a", 4_000_000);
+        assert!(shared_haplotype_sides_agree(&a, &b, false, &hap, 100));
+    }
+
+    struct Fixture {
+        svs: Vec<SVInfo>,
+        hap: HashMap<String, u8>,
+    }
+
+    impl Fixture {
+        /// Calls named by their haplotype combination, e.g. "a11" sits on
+        /// (hap1, hap1).
+        fn new(names: &[(&str, u8, u8)]) -> Self {
+            let mut hap = HashMap::new();
+            hap.insert("h1_left".to_string(), 1u8);
+            hap.insert("h2_left".to_string(), 2u8);
+            hap.insert("h1_right".to_string(), 1u8);
+            hap.insert("h2_right".to_string(), 2u8);
+            let svs = names
+                .iter()
+                .map(|(id, a, b)| {
+                    let c1 = if *a == 1 { "h1_left" } else { "h2_left" };
+                    let c2 = if *b == 1 { "h1_right" } else { "h2_right" };
+                    sv(id, c1, c2)
+                })
+                .collect();
+            Fixture { svs, hap }
+        }
+
+        fn group(&self, candidates: &[(String, String, usize, f64)]) -> Vec<Vec<String>> {
+            let by_id: HashMap<&str, &SVInfo> =
+                self.svs.iter().map(|s| (s.sv_id.as_str(), s)).collect();
+            build_groups(candidates, &by_id, &self.hap)
+                .into_iter()
+                .map(|g| g.into_iter().map(|(id, _)| id).collect())
+                .collect()
+        }
+    }
+
+    fn cand(a: &str, b: &str, identity: f64) -> (String, String, usize, f64) {
+        (a.to_string(), b.to_string(), 0, identity)
+    }
+
+    #[test]
+    fn all_four_haplotype_combinations_form_one_group() {
+        let f = Fixture::new(&[("a", 1, 1), ("b", 1, 2), ("c", 2, 1), ("d", 2, 2)]);
+        let ids = ["a", "b", "c", "d"];
+        let mut candidates = Vec::new();
+        for (i, x) in ids.iter().enumerate() {
+            for y in ids.iter().skip(i + 1) {
+                candidates.push(cand(x, y, 99.0));
+            }
+        }
+        assert_eq!(
+            f.group(&candidates),
+            vec![vec![
+                "a".to_string(),
+                "b".to_string(),
+                "c".to_string(),
+                "d".to_string()
+            ]]
+        );
+    }
+
+    #[test]
+    fn a_slot_taken_by_a_better_pair_is_not_taken_again() {
+        // b and c both want the (1,2) slot next to a; b aligns better.
+        let f = Fixture::new(&[("a", 1, 1), ("b", 1, 2), ("c", 1, 2)]);
+        let candidates = vec![
+            cand("a", "b", 99.5),
+            cand("a", "c", 99.0),
+            cand("b", "c", 99.0),
+        ];
+        assert_eq!(
+            f.group(&candidates),
+            vec![vec!["a".to_string(), "b".to_string()]]
+        );
+    }
+
+    #[test]
+    fn same_combination_calls_never_group() {
+        // A repeat family: every call is (1,1), so none of them can be the same
+        // event called on the other haplotype.
+        let f = Fixture::new(&[("a", 1, 1), ("b", 1, 1), ("c", 1, 1)]);
+        let candidates = vec![
+            cand("a", "b", 99.0),
+            cand("a", "c", 99.0),
+            cand("b", "c", 99.0),
+        ];
+        assert!(f.group(&candidates).is_empty());
+    }
+
+    #[test]
+    fn a_chain_without_a_closing_edge_does_not_merge() {
+        // a~b and b~d realign, a~d does not: d must not join through b.
+        let f = Fixture::new(&[("a", 1, 1), ("b", 1, 2), ("d", 2, 2)]);
+        let candidates = vec![cand("a", "b", 99.5), cand("b", "d", 99.0)];
+        assert_eq!(
+            f.group(&candidates),
+            vec![vec!["a".to_string(), "b".to_string()]]
+        );
+    }
+
+    #[test]
+    fn grouping_is_independent_of_input_order() {
+        let f = Fixture::new(&[("a", 1, 1), ("b", 1, 2), ("c", 2, 1), ("d", 2, 2)]);
+        let ids = ["a", "b", "c", "d"];
+        let mut forward = Vec::new();
+        for (i, x) in ids.iter().enumerate() {
+            for y in ids.iter().skip(i + 1) {
+                forward.push(cand(x, y, 99.0));
+            }
+        }
+        let mut reverse = forward.clone();
+        reverse.reverse();
+        assert_eq!(f.group(&forward), f.group(&reverse));
+    }
+
+    /// A deletion has both breakpoints on one contig, so only (1,1) and (2,2)
+    /// exist and a group can never exceed two calls.
+    #[test]
+    fn an_intra_contig_event_pairs_at_most_two_calls() {
+        let mut hap = HashMap::new();
+        hap.insert("h1".to_string(), 1u8);
+        hap.insert("h2".to_string(), 2u8);
+        let svs = vec![sv("d_1", "h1", "h1"), sv("d_2", "h2", "h2"), sv("d_3", "h1", "h1")];
+        let by_id: HashMap<&str, &SVInfo> = svs.iter().map(|s| (s.sv_id.as_str(), s)).collect();
+        let candidates = vec![
+            cand("d_1", "d_2", 99.5),
+            cand("d_2", "d_3", 99.0),
+            cand("d_1", "d_3", 99.0),
+        ];
+        let groups = build_groups(&candidates, &by_id, &hap);
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].len(), 2);
+    }
 }

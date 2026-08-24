@@ -562,7 +562,11 @@ pub fn run(
                 info.support_read,
                 info.control_total_read,
                 info.control_support_read,
-                "PASS".to_string(),
+                // Nothing was consolidated here, so there is no combined support
+                // to re-judge the call on: keep whatever `nanomonsv get` decided.
+                // Overwriting this with PASS promoted every Too_low_VAF singleton
+                // (ONT: 500 of 514) past the `grep PASS` in prep_sv.sh.
+                info.is_filter.clone(),
                 sv_id.clone(),
                 hap1 + hap2 + unassign,
                 bp1_cat.to_string(),

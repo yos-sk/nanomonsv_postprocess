@@ -3,12 +3,17 @@ use bio::alignment::AlignmentOperation::*;
 
 use std::error::Error;
 
+/// Local-align `seq1` against `seq2` and its reverse complement.
+///
+/// Returns the identity (%) of the better orientation among those clearing both
+/// thresholds, or `None` when neither does. The caller needs the value, not just
+/// a yes/no, so that competing breakpoint pairs can be ranked against each other.
 pub fn run(
     seq1: &Vec<u8>,
     seq2: &Vec<u8>,
     identity_th: f64,
     length_th: usize,
-) -> Result<bool, Box<dyn Error>> {
+) -> Result<Option<f64>, Box<dyn Error>> {
     let score = |a: u8, b: u8| if a == b { 1i32 } else { -2i32 };
     // Gap open score: -2, gap extension score: -1
     let mut aligner1 = Aligner::with_capacity(seq1.len(), seq2.len(), -10, -1, &score);
@@ -47,15 +52,15 @@ pub fn run(
     let identity2: f64 = m as f64 / (m as f64 + d as f64) * 100.0;
     let length2 = length;
 
-    /*
-    let identity = if identity1 > identity2 {
-        identity1
-    } else {
-        identity2
-    };
-    */
-    Ok((identity1 >= identity_th && length1 >= length_th)
-        || (identity2 >= identity_th && length2 >= length_th))
+    let forward = identity1 >= identity_th && length1 >= length_th;
+    let revcomp = identity2 >= identity_th && length2 >= length_th;
+
+    Ok(match (forward, revcomp) {
+        (true, true) => Some(identity1.max(identity2)),
+        (true, false) => Some(identity1),
+        (false, true) => Some(identity2),
+        (false, false) => None,
+    })
 }
 
 pub fn reverse_complement(sequence: &Vec<u8>) -> Vec<u8> {
