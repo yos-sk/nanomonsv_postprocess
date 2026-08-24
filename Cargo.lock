@@ -784,7 +784,7 @@ dependencies = [
 
 [[package]]
 name = "nanomonsv_postprocess"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "bio",
  "clap",

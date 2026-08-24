@@ -7,7 +7,7 @@ mod merge;
 mod realignment;
 
 #[derive(Parser)]
-#[command(author = "Yoshitaka Sakamoto", version = "0.2.5", about = "Post process of nanomonsv", long_about = None)]
+#[command(author = "Yoshitaka Sakamoto", version = "0.2.6", about = "Post process of nanomonsv", long_about = None)]
 
 struct Arguments {
     #[command(subcommand)]
@@ -34,7 +34,7 @@ enum Commands {
         #[arg(short = 'b', long)]
         bam_file: String,
 
-        #[arg(short = 'd', long, default_value = "99.0")]
+        #[arg(short = 'd', long, default_value = "98.0")]
         min_identity: String,
 
         #[arg(short = 'l', long, default_value = "180")]
