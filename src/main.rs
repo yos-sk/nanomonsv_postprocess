@@ -7,7 +7,7 @@ mod merge;
 mod realignment;
 
 #[derive(Parser)]
-#[command(author = "Yoshitaka Sakamoto", version = "0.2.6", about = "Post process of nanomonsv", long_about = None)]
+#[command(author = "Yoshitaka Sakamoto", version = "0.2.7", about = "Post process of nanomonsv", long_about = None)]
 
 struct Arguments {
     #[command(subcommand)]
