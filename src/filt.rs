@@ -68,6 +68,50 @@ impl NanomonsvInfo {
     }
 }
 
+// When one side of a group is Unassigned and the other haplotype1/2, prefer
+// the member whose breakpoints share a contig: a hap1<->hap2 rearrangement is
+// usually a split-alignment artifact of the diploid reference. Contig identity
+// only; the haplotype label is not consulted.
+fn select_intra_contig_representative(
+    bp1_cat: &str,
+    bp2_cat: &str,
+    key: &[String],
+    db: &HashMap<String, NanomonsvInfo>,
+) -> Option<String> {
+    let one_side_unassigned = (bp1_cat == "Unassigned"
+        && (bp2_cat == "haplotype1" || bp2_cat == "haplotype2"))
+        || (bp2_cat == "Unassigned" && (bp1_cat == "haplotype1" || bp1_cat == "haplotype2"));
+    if !one_side_unassigned {
+        return None;
+    }
+
+    let mut best: Option<&NanomonsvInfo> = None;
+    for sv_id in key {
+        let info = match db.get(sv_id) {
+            Some(info) => info,
+            None => continue,
+        };
+        if info.bp1_contig != info.bp2_contig {
+            continue;
+        }
+        best = match best {
+            None => Some(info),
+            Some(current) => {
+                if info.support_read > current.support_read
+                    || (info.support_read == current.support_read
+                        && info.sv_id < current.sv_id)
+                {
+                    Some(info)
+                } else {
+                    Some(current)
+                }
+            }
+        };
+    }
+
+    best.map(|info| info.sv_id.clone())
+}
+
 pub fn run(
     identical_list: &str,
     nanomonsv_result: &str,
@@ -185,6 +229,13 @@ pub fn run(
 
         let mut c_sv_id: String = String::new();
         let mut max_n_read = 0;
+
+        if let Some(id) = select_intra_contig_representative(&bp1_cat, &bp2_cat, &key, &nanomonsv_db) {
+            eprintln!("{}: intra-contig representative {} preferred ({}/{})", key.join(","), id, bp1_cat, bp2_cat);
+            c_sv_id = id;
+        }
+
+        if c_sv_id.is_empty() {
         for info_1 in &bp1_info {
             if info_1.0 == "-" {
                 continue;
@@ -192,7 +243,7 @@ pub fn run(
             for info_2 in &bp2_info {
                 if info_1.0 == info_2.0 {
                     if c_sv_id.is_empty() {
-                        c_sv_id = info_1.0.to_string(); 
+                        c_sv_id = info_1.0.to_string();
                         max_n_read = info_1.2 + info_2.2;
                     } else {
                         if info_1.2 + info_2.2 > max_n_read {
@@ -299,6 +350,7 @@ pub fn run(
                     }
                 }
             }
+        }
         }
 
         if !c_sv_id.is_empty() {
@@ -605,4 +657,144 @@ pub fn run(
     }
     eprintln!("Recording new SV results finished.");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Builds a minimal NanomonsvInfo for the given sv_id/contigs/support_read;
+    // fields irrelevant to the intra-contig selection are filled with placeholders.
+    fn info(id: &str, bp1_contig: &str, bp2_contig: &str, support_read: usize) -> NanomonsvInfo {
+        NanomonsvInfo::new(
+            bp1_contig.to_string(),
+            100,
+            "+".to_string(),
+            bp2_contig.to_string(),
+            200,
+            "+".to_string(),
+            "-".to_string(),
+            id.to_string(),
+            support_read,
+            support_read,
+            0,
+            0,
+            "PASS".to_string(),
+            "-".to_string(),
+            support_read,
+            "-".to_string(),
+            "-".to_string(),
+        )
+    }
+
+    fn db(entries: Vec<NanomonsvInfo>) -> HashMap<String, NanomonsvInfo> {
+        entries.into_iter().map(|i| (i.sv_id.clone(), i)).collect()
+    }
+
+    #[test]
+    fn a_intra_contig_member_wins_over_inter_haplotype_member() {
+        let key = vec!["inter".to_string(), "intra".to_string()];
+        let d = db(vec![
+            info("inter", "haplotype1-a", "haplotype2-b", 3),
+            info("intra", "haplotype1-a", "haplotype1-a", 15),
+        ]);
+        assert_eq!(
+            select_intra_contig_representative("Unassigned", "haplotype2", &key, &d),
+            Some("intra".to_string())
+        );
+    }
+
+    #[test]
+    fn b_order_of_unassigned_side_does_not_matter() {
+        let key = vec!["inter".to_string(), "intra".to_string()];
+        let d = db(vec![
+            info("inter", "haplotype1-a", "haplotype2-b", 3),
+            info("intra", "haplotype1-a", "haplotype1-a", 15),
+        ]);
+        assert_eq!(
+            select_intra_contig_representative("haplotype1", "Unassigned", &key, &d),
+            Some("intra".to_string())
+        );
+    }
+
+    #[test]
+    fn c_both_sides_assigned_is_not_overridden() {
+        let key = vec!["inter".to_string(), "intra".to_string()];
+        let d = db(vec![
+            info("inter", "haplotype1-a", "haplotype2-b", 3),
+            info("intra", "haplotype1-a", "haplotype1-a", 15),
+        ]);
+        assert_eq!(
+            select_intra_contig_representative("haplotype1", "haplotype2", &key, &d),
+            None
+        );
+    }
+
+    #[test]
+    fn d_ambiguous_does_not_qualify() {
+        let key = vec!["intra".to_string()];
+        let d = db(vec![info("intra", "haplotype1-a", "haplotype1-a", 15)]);
+        assert_eq!(
+            select_intra_contig_representative("Ambiguous", "Unassigned", &key, &d),
+            None
+        );
+    }
+
+    #[test]
+    fn e_both_unassigned_does_not_qualify() {
+        let key = vec!["intra".to_string()];
+        let d = db(vec![info("intra", "haplotype1-a", "haplotype1-a", 15)]);
+        assert_eq!(
+            select_intra_contig_representative("Unassigned", "Unassigned", &key, &d),
+            None
+        );
+    }
+
+    #[test]
+    fn f_one_side_unassigned_but_no_intra_contig_member() {
+        let key = vec!["inter".to_string()];
+        let d = db(vec![info("inter", "haplotype1-a", "haplotype2-b", 3)]);
+        assert_eq!(
+            select_intra_contig_representative("Unassigned", "haplotype1", &key, &d),
+            None
+        );
+    }
+
+    #[test]
+    fn g_two_intra_contig_members_higher_support_wins_ties_broken_by_sv_id() {
+        let key = vec!["r_2".to_string(), "r_1".to_string()];
+        let d = db(vec![
+            info("r_2", "haplotype1-a", "haplotype1-a", 15),
+            info("r_1", "haplotype1-b", "haplotype1-b", 20),
+        ]);
+        assert_eq!(
+            select_intra_contig_representative("Unassigned", "haplotype1", &key, &d),
+            Some("r_1".to_string())
+        );
+
+        let key_tie = vec!["r_2".to_string(), "r_1".to_string()];
+        let d_tie = db(vec![
+            info("r_2", "haplotype1-a", "haplotype1-a", 15),
+            info("r_1", "haplotype1-b", "haplotype1-b", 15),
+        ]);
+        assert_eq!(
+            select_intra_contig_representative("Unassigned", "haplotype1", &key_tie, &d_tie),
+            Some("r_1".to_string())
+        );
+    }
+
+    #[test]
+    fn h_intra_contig_member_wins_even_if_its_haplotype_label_mismatches_assigned_side() {
+        // Mirrors r_293/r_294: the assigned side says haplotype2, but the
+        // winning intra-contig call sits on a haplotype1 contig.
+        let key = vec!["r_294".to_string(), "r_293".to_string()];
+        let d = db(vec![
+            info("r_294", "haplotype1-x", "haplotype2-y", 3),
+            info("r_293", "haplotype1-0000023", "haplotype1-0000023", 15),
+        ]);
+        assert_eq!(
+            select_intra_contig_representative("Unassigned", "haplotype2", &key, &d),
+            Some("r_293".to_string())
+        );
+    }
 }

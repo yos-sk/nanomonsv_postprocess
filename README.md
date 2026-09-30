@@ -39,7 +39,7 @@ nanomonsv_postprocess realignment \
     1>SV_group_info.txt 2>SV_pair_info.txt
 ```
 
-4. Filter the nanomonsv result using the grouping information.
+4. Filter the nanomonsv result using the grouping information. In a group with one side Unassigned and the other haplotype1/2, a member whose breakpoints share a contig is chosen as the representative over an inter-haplotype one.
 ```
 nanomonsv_postprocess filt \
     -i SV_group_info.txt \
